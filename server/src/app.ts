@@ -10,6 +10,7 @@ import knowledgePackRoutes from "./modules/knowledge-packs/knowledge-pack.routes
 import downloadRoutes from "./modules/downloads/download.routes";
 import learningRoutes from "./modules/learning/learning.routes";
 import aiRoutes from "./modules/ai/ai.routes";
+import syncRoutes from "./modules/sync/sync.routes";
 
 const app = express();
 
@@ -49,6 +50,7 @@ app.use("/api/v1/knowledge-packs", knowledgePackRoutes);
 app.use("/api/v1/downloads", downloadRoutes);
 app.use("/api/v1/learning", learningRoutes);
 app.use("/api/v1/ai", aiRoutes);
+app.use("/api/v1/sync", syncRoutes);
 
 console.log("Knowledge Packs routes registered");
 

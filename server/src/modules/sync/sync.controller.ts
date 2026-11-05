@@ -1,0 +1,504 @@
+import { Request, Response } from "express";
+import mongoose from "mongoose";
+
+import { Note } from "../notes/note.model";
+import { Folder } from "../folders/folder.model";
+import { generateEmbedding } from "../ai/embedding.service";
+
+import { SyncChange } from "./sync.model";
+import { recordSyncChange } from "./sync.service";
+
+import {
+  pushSyncSchema,
+  pullSyncQuerySchema
+} from "./sync.validation";
+
+export const pushSyncChanges = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  const session = await mongoose.startSession();
+
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required"
+      });
+      return;
+    }
+
+    const validation = pushSyncSchema.safeParse(req.body);
+
+    if (!validation.success) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid synchronization data",
+        errors: validation.error.flatten()
+      });
+      return;
+    }
+
+    const changes = validation.data.changes;
+
+    // Prepare note embeddings before starting the transaction.
+    const preparedChanges = await Promise.all(
+      changes.map(async (change) => {
+        if (
+          change.entityType !== "note" ||
+          change.operation === "delete" ||
+          !change.data?.title
+        ) {
+          return {
+            change,
+            embedding: undefined
+          };
+        }
+
+        try {
+          const embedding = await generateEmbedding(
+            `${change.data.title}\n${change.data.content ?? ""}`
+          );
+
+          return {
+            change,
+            embedding
+          };
+        } catch (error) {
+          console.error("Sync embedding generation failed:", error);
+
+          return {
+            change,
+            embedding: undefined
+          };
+        }
+      })
+    );
+
+    let processed = 0;
+    let duplicates = 0;
+
+    await session.withTransaction(async () => {
+      for (const item of preparedChanges) {
+        const { change, embedding } = item;
+
+        // Prevent duplicate operations.
+        const existingMutation = await SyncChange.findOne({
+          userId,
+          clientMutationId: change.clientMutationId
+        }).session(session);
+
+        if (existingMutation) {
+          duplicates++;
+          continue;
+        }
+
+        // =====================================
+        // NOTE SYNCHRONIZATION
+        // =====================================
+
+        if (change.entityType === "note") {
+
+          // CREATE NOTE
+          if (change.operation === "create") {
+            if (!change.data?.title) {
+              throw new Error("NOTE_TITLE_REQUIRED");
+            }
+
+            if (change.data.folderId) {
+              const folder = await Folder.findOne({
+                _id: change.data.folderId,
+                userId
+              }).session(session);
+
+              if (!folder) {
+                throw new Error("FOLDER_NOT_FOUND");
+              }
+            }
+
+            const existingNote = await Note.findById(
+              change.entityId
+            ).session(session);
+
+            if (existingNote) {
+              throw new Error("NOTE_ALREADY_EXISTS");
+            }
+
+            const [note] = await Note.create(
+              [{
+                _id: new mongoose.Types.ObjectId(change.entityId),
+                userId,
+                title: change.data.title,
+                content: change.data.content ?? "",
+                folderId: change.data.folderId
+                  ? new mongoose.Types.ObjectId(change.data.folderId)
+                  : null,
+                ...(embedding ? { embedding } : {})
+              }],
+              { session }
+            );
+
+            await recordSyncChange({
+              userId,
+              entityType: "note",
+              entityId: note._id.toString(),
+              operation: "create",
+              clientMutationId: change.clientMutationId,
+              data: {
+                title: note.title,
+                content: note.content,
+                folderId: note.folderId?.toString() ?? null
+              }
+            }, session);
+          }
+
+          // UPDATE NOTE
+          else if (change.operation === "update") {
+            if (!change.data || Object.keys(change.data).length === 0) {
+              throw new Error("NOTE_UPDATE_DATA_REQUIRED");
+            }
+
+            const note = await Note.findOne({
+              _id: change.entityId,
+              userId
+            }).session(session);
+
+            if (!note) {
+              throw new Error("NOTE_NOT_FOUND");
+            }
+
+            if (change.data.folderId) {
+              const folder = await Folder.findOne({
+                _id: change.data.folderId,
+                userId
+              }).session(session);
+
+              if (!folder) {
+                throw new Error("FOLDER_NOT_FOUND");
+              }
+            }
+
+            if (change.data.title !== undefined) {
+              note.title = change.data.title;
+            }
+
+            if (change.data.content !== undefined) {
+              note.content = change.data.content;
+            }
+
+            if (change.data.folderId !== undefined) {
+              note.folderId = change.data.folderId
+                ? new mongoose.Types.ObjectId(change.data.folderId)
+                : null;
+            }
+
+            if (
+              change.data.title !== undefined ||
+              change.data.content !== undefined
+            ) {
+              note.embedding = embedding ?? [];
+            }
+
+            await note.save({ session });
+
+            await recordSyncChange({
+              userId,
+              entityType: "note",
+              entityId: note._id.toString(),
+              operation: "update",
+              clientMutationId: change.clientMutationId,
+              data: {
+                title: note.title,
+                content: note.content,
+                folderId: note.folderId?.toString() ?? null
+              }
+            }, session);
+          }
+
+          // DELETE NOTE
+          else if (change.operation === "delete") {
+            const note = await Note.findOneAndDelete(
+              {
+                _id: change.entityId,
+                userId
+              },
+              { session }
+            );
+
+            await recordSyncChange({
+              userId,
+              entityType: "note",
+              entityId: change.entityId,
+              operation: "delete",
+              clientMutationId: change.clientMutationId,
+              data: {
+                title: note?.title ?? "Deleted note",
+                deletedAt: new Date().toISOString()
+              }
+            }, session);
+          }
+        }
+
+        // =====================================
+        // FOLDER SYNCHRONIZATION
+        // =====================================
+
+        else if (change.entityType === "folder") {
+
+          // CREATE FOLDER
+          if (change.operation === "create") {
+            if (!change.data?.name) {
+              throw new Error("FOLDER_NAME_REQUIRED");
+            }
+
+            const existingFolder = await Folder.findById(
+              change.entityId
+            ).session(session);
+
+            if (existingFolder) {
+              throw new Error("FOLDER_ALREADY_EXISTS");
+            }
+
+            const [folder] = await Folder.create(
+              [{
+                _id: new mongoose.Types.ObjectId(change.entityId),
+                userId,
+                name: change.data.name,
+                color: change.data.color ?? "#F47768"
+              }],
+              { session }
+            );
+
+            await recordSyncChange({
+              userId,
+              entityType: "folder",
+              entityId: folder._id.toString(),
+              operation: "create",
+              clientMutationId: change.clientMutationId,
+              data: {
+                name: folder.name,
+                color: folder.color
+              }
+            }, session);
+          }
+
+          // UPDATE FOLDER
+          else if (change.operation === "update") {
+            if (!change.data || Object.keys(change.data).length === 0) {
+              throw new Error("FOLDER_UPDATE_DATA_REQUIRED");
+            }
+
+            const folder = await Folder.findOne({
+              _id: change.entityId,
+              userId
+            }).session(session);
+
+            if (!folder) {
+              throw new Error("FOLDER_NOT_FOUND");
+            }
+
+            if (change.data.name !== undefined) {
+              folder.name = change.data.name;
+            }
+
+            if (change.data.color !== undefined) {
+              folder.color = change.data.color;
+            }
+
+            await folder.save({ session });
+
+            await recordSyncChange({
+              userId,
+              entityType: "folder",
+              entityId: folder._id.toString(),
+              operation: "update",
+              clientMutationId: change.clientMutationId,
+              data: {
+                name: folder.name,
+                color: folder.color
+              }
+            }, session);
+          }
+
+          // DELETE FOLDER
+          else if (change.operation === "delete") {
+            const existingFolder = await Folder.findOne({
+              _id: change.entityId,
+              userId
+            }).session(session);
+
+            if (existingFolder) {
+              const notesInsideFolder = await Note.exists({
+                userId,
+                folderId: existingFolder._id
+              }).session(session);
+
+              if (notesInsideFolder) {
+                throw new Error("FOLDER_NOT_EMPTY");
+              }
+
+              await Folder.deleteOne({
+                _id: change.entityId,
+                userId
+              }).session(session);
+            }
+
+            await recordSyncChange({
+              userId,
+              entityType: "folder",
+              entityId: change.entityId,
+              operation: "delete",
+              clientMutationId: change.clientMutationId,
+              data: {
+                name: existingFolder?.name ?? "Deleted folder",
+                deletedAt: new Date().toISOString()
+              }
+            }, session);
+          }
+        }
+
+        processed++;
+      }
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Synchronization completed successfully",
+      processed,
+      duplicates
+    });
+
+  } catch (error) {
+    console.error("Push sync error:", error);
+
+    const errorMessage =
+      error instanceof Error ? error.message : "";
+
+    const knownErrors: Record<string, string> = {
+      NOTE_TITLE_REQUIRED: "Note title is required",
+      NOTE_UPDATE_DATA_REQUIRED: "Note update data is required",
+      NOTE_NOT_FOUND: "Note not found",
+      NOTE_ALREADY_EXISTS: "A note with this ID already exists",
+      FOLDER_NOT_FOUND: "Folder not found",
+      FOLDER_NAME_REQUIRED: "Folder name is required",
+      FOLDER_UPDATE_DATA_REQUIRED: "Folder update data is required",
+      FOLDER_ALREADY_EXISTS: "A folder with this ID already exists",
+      FOLDER_NOT_EMPTY: "Delete or move the notes inside this folder first"
+    };
+
+    if (knownErrors[errorMessage]) {
+      res.status(409).json({
+        success: false,
+        message: knownErrors[errorMessage]
+      });
+      return;
+    }
+
+    // MongoDB duplicate-key error, for example duplicate folder name.
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === 11000
+    ) {
+      res.status(409).json({
+        success: false,
+        message: "A folder with this name already exists"
+      });
+      return;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to synchronize changes"
+    });
+
+  } finally {
+    await session.endSession();
+  }
+};
+
+// =====================================
+// PULL SYNCHRONIZATION
+// =====================================
+
+export const pullSyncChanges = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: "Authentication required"
+      });
+      return;
+    }
+
+    const validation = pullSyncQuerySchema.safeParse(req.query);
+
+    if (!validation.success) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid synchronization cursor or limit",
+        errors: validation.error.flatten()
+      });
+      return;
+    }
+
+    const { cursor, limit } = validation.data;
+
+    const filter: Record<string, unknown> = {
+      userId
+    };
+
+    if (cursor) {
+      filter._id = {
+        $gt: new mongoose.Types.ObjectId(cursor)
+      };
+    }
+
+    const changes = await SyncChange.find(filter)
+      .sort({ _id: 1 })
+      .limit(limit + 1)
+      .lean();
+
+    const hasMore = changes.length > limit;
+
+    const results = hasMore
+      ? changes.slice(0, limit)
+      : changes;
+
+    const nextCursor =
+      results.length > 0
+        ? results[results.length - 1]._id.toString()
+        : cursor ?? null;
+
+    res.status(200).json({
+      success: true,
+      count: results.length,
+      hasMore,
+      nextCursor,
+      changes: results.map((change) => ({
+        id: change._id.toString(),
+        entityType: change.entityType,
+        entityId: change.entityId,
+        operation: change.operation,
+        data: change.data,
+        createdAt: change.createdAt
+      }))
+    });
+
+  } catch (error) {
+    console.error("Pull sync error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to retrieve synchronization changes"
+    });
+  }
+};

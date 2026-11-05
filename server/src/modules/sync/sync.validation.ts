@@ -1,0 +1,52 @@
+import { z } from "zod";
+
+const noteSyncSchema = z.object({
+entityType: z.literal("note"),
+entityId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid note ID"),
+operation: z.enum(["create", "update", "delete"]),
+clientMutationId: z.string().uuid(),
+data: z.object({
+title: z.string().trim().min(1).max(200).optional(),
+content: z.string().optional(),
+folderId: z
+.string()
+.regex(/^[0-9a-fA-F]{24}$/, "Invalid folder ID")
+.nullable()
+.optional()
+}).optional()
+});
+
+const folderSyncSchema = z.object({
+entityType: z.literal("folder"),
+entityId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid folder ID"),
+operation: z.enum(["create", "update", "delete"]),
+clientMutationId: z.string().uuid(),
+data: z.object({
+name: z.string().trim().min(1).max(50).optional(),
+color: z.string().optional()
+}).optional()
+});
+
+export const pushSyncSchema = z.object({
+changes: z
+.array(z.discriminatedUnion("entityType", [
+noteSyncSchema,
+folderSyncSchema
+]))
+.min(1)
+.max(50)
+});
+
+export const pullSyncQuerySchema = z.object({
+cursor: z
+.string()
+.regex(/^[0-9a-fA-F]{24}$/, "Invalid sync cursor")
+.optional(),
+
+limit: z.coerce
+.number()
+.int()
+.min(1)
+.max(100)
+.default(50)
+});

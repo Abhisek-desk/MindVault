@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 
 import { Note } from "./note.model";
 import { Folder } from "../folders/folder.model";
+import { generateEmbedding } from "../ai/embedding.service";
 
 // ========================================
 // CREATE NOTE
@@ -10,7 +11,7 @@ import { Folder } from "../folders/folder.model";
 
 export const createNote = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const { title, content, folderId } = req.body;
@@ -22,7 +23,7 @@ export const createNote = async (
     ) {
       res.status(400).json({
         success: false,
-        message: "A valid note title is required"
+        message: "A valid note title is required",
       });
       return;
     }
@@ -30,7 +31,7 @@ export const createNote = async (
     if (content !== undefined && typeof content !== "string") {
       res.status(400).json({
         success: false,
-        message: "Note content must be text"
+        message: "Note content must be text",
       });
       return;
     }
@@ -40,64 +41,68 @@ export const createNote = async (
       if (!mongoose.isValidObjectId(folderId)) {
         res.status(400).json({
           success: false,
-          message: "Invalid folder ID"
+          message: "Invalid folder ID",
         });
         return;
       }
 
       const folder = await Folder.findOne({
         _id: folderId,
-        userId: req.userId
+        userId: req.userId,
       });
 
       if (!folder) {
         res.status(404).json({
           success: false,
-          message: "Folder not found"
+          message: "Folder not found",
         });
         return;
       }
+    }
+
+    let embedding: number[] | undefined;
+
+    try {
+      embedding = await generateEmbedding(`${title.trim()}\n${content ?? ""}`);
+    } catch (error) {
+      console.error("Note embedding generation failed:", error);
     }
 
     const note = await Note.create({
       userId: req.userId,
       title: title.trim(),
       content: content ?? "",
-      folderId: folderId ?? null
+      folderId: folderId ?? null,
+      ...(embedding ? { embedding } : {}),
     });
 
     res.status(201).json({
       success: true,
       message: "Note created successfully",
-      note
+      note,
     });
-
   } catch (error) {
     console.error("Create note error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to create note"
+      message: "Failed to create note",
     });
   }
 };
-
 
 // ========================================
 // GET NOTES
 // ========================================
 
-export const getNotes = async (
-  req: Request,
-  res: Response
-): Promise<void> => {
+export const getNotes = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
 
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -106,7 +111,7 @@ export const getNotes = async (
       userId: string;
       folderId?: mongoose.Types.ObjectId | null;
     } = {
-      userId
+      userId,
     };
 
     const folderId = req.query.folderId;
@@ -118,7 +123,7 @@ export const getNotes = async (
         if (!mongoose.isValidObjectId(folderId)) {
           res.status(400).json({
             success: false,
-            message: "Invalid folder ID"
+            message: "Invalid folder ID",
           });
           return;
         }
@@ -127,25 +132,22 @@ export const getNotes = async (
       }
     }
 
-    const notes = await Note.find(filter)
-      .sort({ updatedAt: -1 });
+    const notes = await Note.find(filter).sort({ updatedAt: -1 });
 
     res.status(200).json({
       success: true,
       count: notes.length,
-      notes
+      notes,
     });
-
   } catch (error) {
     console.error("Get notes error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch notes"
+      message: "Failed to fetch notes",
     });
   }
 };
-
 
 // ========================================
 // UPDATE NOTE
@@ -153,7 +155,7 @@ export const getNotes = async (
 
 export const updateNote = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -162,7 +164,7 @@ export const updateNote = async (
     if (!mongoose.isValidObjectId(id)) {
       res.status(400).json({
         success: false,
-        message: "Invalid note ID"
+        message: "Invalid note ID",
       });
       return;
     }
@@ -171,6 +173,7 @@ export const updateNote = async (
       title?: string;
       content?: string;
       folderId?: mongoose.Types.ObjectId | null;
+      embedding?: number[];
     } = {};
 
     if (title !== undefined) {
@@ -181,7 +184,7 @@ export const updateNote = async (
       ) {
         res.status(400).json({
           success: false,
-          message: "Invalid note title"
+          message: "Invalid note title",
         });
         return;
       }
@@ -193,7 +196,7 @@ export const updateNote = async (
       if (typeof content !== "string") {
         res.status(400).json({
           success: false,
-          message: "Note content must be text"
+          message: "Note content must be text",
         });
         return;
       }
@@ -211,20 +214,20 @@ export const updateNote = async (
         ) {
           res.status(400).json({
             success: false,
-            message: "Invalid folder ID"
+            message: "Invalid folder ID",
           });
           return;
         }
 
         const folder = await Folder.findOne({
           _id: folderId,
-          userId: req.userId
+          userId: req.userId,
         });
 
         if (!folder) {
           res.status(404).json({
             success: false,
-            message: "Folder not found"
+            message: "Folder not found",
           });
           return;
         }
@@ -236,27 +239,57 @@ export const updateNote = async (
     if (Object.keys(updates).length === 0) {
       res.status(400).json({
         success: false,
-        message: "No updates provided"
+        message: "No updates provided",
       });
       return;
+    }
+
+    // Regenerate embedding when title or content changes.
+    if (updates.title !== undefined || updates.content !== undefined) {
+      const existingNote = await Note.findOne({
+        _id: id,
+        userId: req.userId,
+      });
+
+      if (!existingNote) {
+        res.status(404).json({
+          success: false,
+          message: "Note not found",
+        });
+        return;
+      }
+
+      const finalTitle = updates.title ?? existingNote.title;
+      const finalContent = updates.content ?? existingNote.content;
+
+      try {
+        updates.embedding = await generateEmbedding(
+          `${finalTitle}\n${finalContent}`,
+        );
+      } catch (error) {
+        console.error("Updated note embedding generation failed:", error);
+
+        // Clear the outdated embedding if generation fails.
+        updates.embedding = [];
+      }
     }
 
     const note = await Note.findOneAndUpdate(
       {
         _id: id,
-        userId: req.userId
+        userId: req.userId,
       },
       updates,
       {
         new: true,
-        runValidators: true
-      }
+        runValidators: true,
+      },
     );
 
     if (!note) {
       res.status(404).json({
         success: false,
-        message: "Note not found"
+        message: "Note not found",
       });
       return;
     }
@@ -264,19 +297,17 @@ export const updateNote = async (
     res.status(200).json({
       success: true,
       message: "Note updated successfully",
-      note
+      note,
     });
-
   } catch (error) {
     console.error("Update note error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to update note"
+      message: "Failed to update note",
     });
   }
 };
-
 
 // ========================================
 // DELETE NOTE
@@ -284,7 +315,7 @@ export const updateNote = async (
 
 export const deleteNote = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const { id } = req.params;
@@ -292,35 +323,34 @@ export const deleteNote = async (
     if (!mongoose.isValidObjectId(id)) {
       res.status(400).json({
         success: false,
-        message: "Invalid note ID"
+        message: "Invalid note ID",
       });
       return;
     }
 
     const note = await Note.findOneAndDelete({
       _id: id,
-      userId: req.userId
+      userId: req.userId,
     });
 
     if (!note) {
       res.status(404).json({
         success: false,
-        message: "Note not found"
+        message: "Note not found",
       });
       return;
     }
 
     res.status(200).json({
       success: true,
-      message: "Note deleted successfully"
+      message: "Note deleted successfully",
     });
-
   } catch (error) {
     console.error("Delete note error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to delete note"
+      message: "Failed to delete note",
     });
   }
 };

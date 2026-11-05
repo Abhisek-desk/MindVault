@@ -5,6 +5,9 @@ export interface INote extends Document {
   folderId?: mongoose.Types.ObjectId | null;
   title: string;
   content: string;
+  embedding?: number[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const noteSchema = new Schema<INote>(
@@ -12,30 +15,35 @@ const noteSchema = new Schema<INote>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
 
     folderId: {
       type: Schema.Types.ObjectId,
       ref: "Folder",
-      default: null
+      default: null,
     },
 
     title: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 200
+      maxlength: 200,
     },
 
     content: {
       type: String,
-      default: ""
-    }
+      default: "",
+    },
+    embedding: {
+      type: [Number],
+      default: undefined,
+      select: false,
+    },
   },
   {
-    timestamps: true
-  }
+    timestamps: true,
+  },
 );
 
 noteSchema.index({ userId: 1, folderId: 1 });

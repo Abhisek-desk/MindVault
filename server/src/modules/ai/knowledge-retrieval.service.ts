@@ -7,20 +7,22 @@ interface RetrievedNote {
   updatedAt: Date;
 }
 
+interface ScoredNote extends RetrievedNote {
+  semanticScore: number;
+  keywordScore: number;
+  finalScore: number;
+}
+
 const STOP_WORDS = new Set([
   "the", "and", "for", "are", "was", "were",
   "what", "when", "where", "which", "who",
   "how", "why", "can", "could", "would",
   "should", "with", "from", "that", "this",
   "have", "has", "had", "about", "into",
-  "your", "you", "me", "my", "tell", "explain"
+  "your", "you", "me", "my", "tell", "explain",
+  "did", "does", "do", "saved", "save"
 ]);
 
-const escapeRegex = (value: string): string => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
-
-// Calculate cosine similarity between two vectors.
 const cosineSimilarity = (
   vectorA: number[],
   vectorB: number[]
@@ -48,17 +50,27 @@ const cosineSimilarity = (
   );
 };
 
+const normalizeSemanticScore = (score: number): number => {
+  const minimumScore = 0.25;
+
+  if (score < minimumScore) {
+    return 0;
+  }
+
+  return Math.min(
+    1,
+    (score - minimumScore) / (1 - minimumScore)
+  );
+};
+
 export const retrieveRelevantNotes = async (
   userId: string,
   question: string
 ): Promise<RetrievedNote[]> => {
 
-  // ------------------------------------
-  // STEP 1: Generate question embedding
-  // ------------------------------------
+  let questionEmbedding: number[] = [];
 
-  let questionEmbedding: number[];
-
+  // Step 1: Generate question embedding
   try {
     questionEmbedding = await generateEmbedding(question);
   } catch (error) {
@@ -66,14 +78,9 @@ export const retrieveRelevantNotes = async (
       "Question embedding failed. Using keyword search:",
       error
     );
-
-    questionEmbedding = [];
   }
 
-  // ------------------------------------
-  // STEP 2: Extract search keywords
-  // ------------------------------------
-
+  // Step 2: Extract useful keywords
   const keywords = [
     ...new Set(
       question
@@ -83,114 +90,93 @@ export const retrieveRelevantNotes = async (
     )
   ].slice(0, 8);
 
-  // ------------------------------------
-  // STEP 3: Retrieve user's notes
-  // ------------------------------------
-
+  // Step 3: Retrieve this user's notes
   const notes = await Note.find({ userId })
     .select("+embedding title content updatedAt")
     .sort({ updatedAt: -1 })
     .limit(500)
     .lean();
 
-  // ------------------------------------
-  // STEP 4: Semantic ranking
-  // ------------------------------------
+  // Step 4: Calculate combined relevance scores
+  const scoredNotes: ScoredNote[] = [];
 
-  const semanticResults = notes
-    .filter(
-      (note) =>
-        questionEmbedding.length > 0 &&
-        Array.isArray(note.embedding) &&
-        note.embedding.length === questionEmbedding.length
-    )
-    .map((note) => ({
+  for (const note of notes) {
+    const searchableText =
+      `${note.title} ${note.content}`.toLowerCase();
+
+    // Calculate semantic similarity
+    let semanticScore = 0;
+
+    if (
+      questionEmbedding.length > 0 &&
+      Array.isArray(note.embedding) &&
+      note.embedding.length === questionEmbedding.length
+    ) {
+      semanticScore = cosineSimilarity(
+        questionEmbedding,
+        note.embedding as number[]
+      );
+    }
+
+    const normalizedSemanticScore =
+      normalizeSemanticScore(semanticScore);
+
+    // Calculate keyword relevance
+    const matchedKeywords = keywords.filter((keyword) =>
+      searchableText.includes(keyword)
+    ).length;
+
+    const keywordScore =
+      keywords.length > 0
+        ? matchedKeywords / keywords.length
+        : 0;
+
+    // Skip notes with no meaningful relevance
+    if (
+      normalizedSemanticScore === 0 &&
+      keywordScore === 0
+    ) {
+      continue;
+    }
+
+    // Combine semantic and keyword scores
+    let finalScore = 0;
+
+    if (questionEmbedding.length > 0) {
+      finalScore =
+        normalizedSemanticScore * 0.7 +
+        keywordScore * 0.3;
+    } else {
+      // Keyword-only fallback
+      finalScore = keywordScore;
+    }
+
+    scoredNotes.push({
       title: note.title,
       content: note.content,
       updatedAt: note.updatedAt,
-      score: cosineSimilarity(
-        questionEmbedding,
-        note.embedding as number[]
-      )
-    }))
-    .filter((note) => note.score >= 0.25)
-    .sort((a, b) => b.score - a.score);
-
-  // ------------------------------------
-  // STEP 5: Keyword fallback
-  // ------------------------------------
-
-  let keywordResults: RetrievedNote[] = [];
-
-  if (keywords.length > 0) {
-    const searchConditions = keywords.map((keyword) => {
-      const pattern = new RegExp(escapeRegex(keyword), "i");
-
-      return {
-        $or: [
-          { title: pattern },
-          { content: pattern }
-        ]
-      };
+      semanticScore: normalizedSemanticScore,
+      keywordScore,
+      finalScore
     });
-
-    const matchingNotes = await Note.find({
-      userId,
-      $or: searchConditions
-    })
-      .select("title content updatedAt")
-      .sort({ updatedAt: -1 })
-      .limit(20)
-      .lean();
-
-    keywordResults = matchingNotes
-      .map((note) => {
-        const searchableText =
-          `${note.title} ${note.content}`.toLowerCase();
-
-        const score = keywords.reduce(
-          (total, keyword) =>
-            total + (
-              searchableText.includes(keyword) ? 1 : 0
-            ),
-          0
-        );
-
-        return {
-          title: note.title,
-          content: note.content,
-          updatedAt: note.updatedAt,
-          score
-        };
-      })
-      .filter((note) => note.score > 0)
-      .sort((a, b) => b.score - a.score);
   }
 
-  // ------------------------------------
-  // STEP 6: Combine results
-  // ------------------------------------
-
-  const combinedResults = [
-    ...semanticResults,
-    ...keywordResults
-  ];
-
-  // Remove duplicate notes using their title and content.
-  const uniqueResults = new Map<string, RetrievedNote>();
-
-  for (const note of combinedResults) {
-    const key = `${note.title}::${note.content}`;
-
-    if (!uniqueResults.has(key)) {
-      uniqueResults.set(key, {
-        title: note.title,
-        content: note.content,
-        updatedAt: note.updatedAt
-      });
+  // Step 5: Sort by combined relevance
+  scoredNotes.sort((a, b) => {
+    if (b.finalScore !== a.finalScore) {
+      return b.finalScore - a.finalScore;
     }
-  }
 
-  // Return the five most relevant notes.
-  return Array.from(uniqueResults.values()).slice(0, 5);
+    return (
+      new Date(b.updatedAt).getTime() -
+      new Date(a.updatedAt).getTime()
+    );
+  });
+
+  // Step 6: Return the five most relevant notes
+  return scoredNotes.slice(0, 5).map((note) => ({
+    title: note.title,
+    content: note.content,
+    updatedAt: note.updatedAt
+  }));
 };

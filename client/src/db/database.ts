@@ -1,3 +1,4 @@
+
 import Dexie from "dexie";
 import type { Table } from "dexie";
 
@@ -10,6 +11,7 @@ export interface LocalNote {
   title: string;
   content: string;
   folderId: string | null;
+  version: number;
   createdAt: string;
   updatedAt: string;
   syncStatus: "synced" | "pending" | "conflict";
@@ -23,6 +25,7 @@ export interface LocalFolder {
   id: string;
   name: string;
   color: string;
+  version: number;
   createdAt: string;
   updatedAt: string;
   syncStatus: "synced" | "pending" | "conflict";
@@ -54,6 +57,7 @@ export interface LocalSyncChange {
   entityId: string;
   operation: "create" | "update" | "delete";
   clientMutationId: string;
+  expectedVersion?: number;
   data?: Record<string, unknown>;
   createdAt: string;
   status: "pending" | "processing" | "failed";
@@ -74,19 +78,12 @@ export interface LocalSyncMeta {
 
 export interface LocalConflict {
   id: string;
-
   entityType: "note" | "folder";
-
   entityId: string;
-
   operation: "create" | "update" | "delete";
-
   localData: Record<string, unknown> | null;
-
   serverData: Record<string, unknown> | null;
-
   serverChangeId: string;
-
   detectedAt: string;
 }
 
@@ -132,8 +129,39 @@ class MindVaultDatabase extends Dexie {
       syncQueue:
         "++id, &clientMutationId, [entityType+entityId], createdAt, status",
       syncMeta: "key",
-      conflicts: "id, &[entityType+entityId], entityType, entityId, detectedAt",
+      conflicts:
+        "id, &[entityType+entityId], entityType, entityId, detectedAt",
     });
+
+    // Database version 4: Added OCC version tracking
+    this.version(4)
+      .stores({
+        notes: "id, folderId, updatedAt, syncStatus",
+        packs: "id, category, language",
+        folders: "id, name, updatedAt, syncStatus",
+        syncQueue:
+          "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+        syncMeta: "key",
+        conflicts:
+          "id, &[entityType+entityId], entityType, entityId, detectedAt",
+      })
+      .upgrade(async (transaction) => {
+        // Existing records predate OCC.
+        // Version 1 is their initial server version.
+        await transaction
+          .table("notes")
+          .toCollection()
+          .modify((note: LocalNote) => {
+            note.version ??= 1;
+          });
+
+        await transaction
+          .table("folders")
+          .toCollection()
+          .modify((folder: LocalFolder) => {
+            folder.version ??= 1;
+          });
+      });
   }
 }
 

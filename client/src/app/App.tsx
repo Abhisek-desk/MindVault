@@ -1,8 +1,10 @@
+
 import { useEffect } from "react";
 import { RouterProvider } from "react-router-dom";
 
 import router from "./router";
 import { useAuthStore } from "../stores/auth.store";
+import SyncManager from "../components/offline/SyncManager";
 
 function App() {
   const initializeAuth = useAuthStore(
@@ -13,7 +15,12 @@ function App() {
     void initializeAuth();
   }, [initializeAuth]);
 
-  return <RouterProvider router={router} />;
+  return (
+    <>
+      <SyncManager />
+      <RouterProvider router={router} />
+    </>
+  );
 }
 
 export default App;

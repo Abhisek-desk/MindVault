@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+
 import {
   LayoutDashboard,
   BookOpen,
@@ -8,7 +10,9 @@ import {
   Settings,
   LogOut,
   X,
-  Vault
+  Vault,
+  Search,
+  RefreshCw,
 } from "lucide-react";
 
 import { useAuthStore } from "../../../stores/auth.store";
@@ -23,13 +27,31 @@ const navigationItems = [
   { name: "My Library", path: "/library", icon: BookOpen },
   { name: "My Notes", path: "/notes", icon: FileText },
   { name: "Folders", path: "/folders", icon: Folder },
-  { name: "Learning", path: "/learning", icon: Brain }
+  { name: "Learning", path: "/learning", icon: Brain },
+  { name: "Search", path: "/search", icon: Search },
+  { name: "Conflict Center", path: "/conflicts", icon: RefreshCw },
 ];
 
 function Sidebar({ isOpen, onClose }: SidebarProps) {
   const navigate = useNavigate();
+
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -59,9 +81,7 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             <div>
               <h1 className="text-xl font-bold">Mind Vault</h1>
-              <p className="text-xs text-gray-400">
-                Your knowledge space
-              </p>
+              <p className="text-xs text-gray-400">Your knowledge space</p>
             </div>
           </div>
 
@@ -76,9 +96,18 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
         {/* Navigation */}
         <div className="mt-12">
-          <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-gray-400">
-            Workspace
-          </p>
+          <div className="mb-4 flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
+              Workspace
+            </p>
+
+            {!isOnline && (
+              <span className="flex items-center gap-1.5 rounded-full bg-[#F47768]/15 px-2.5 py-1 text-[10px] font-bold tracking-wider text-[#F47768]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#F47768]" />
+                OFFLINE
+              </span>
+            )}
+          </div>
 
           <nav className="space-y-2">
             {navigationItems.map((item) => {

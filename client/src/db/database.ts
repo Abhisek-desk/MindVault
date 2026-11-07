@@ -40,6 +40,8 @@ export interface LocalPack {
   language: string;
   version: string;
   downloadedAt: string;
+  fileSizeBytes: number;
+  contentBlob?: Blob;
 }
 
 // =====================================
@@ -67,6 +69,28 @@ export interface LocalSyncMeta {
 }
 
 // =====================================
+// LOCAL CONFLICT TYPE
+// =====================================
+
+export interface LocalConflict {
+  id: string;
+
+  entityType: "note" | "folder";
+
+  entityId: string;
+
+  operation: "create" | "update" | "delete";
+
+  localData: Record<string, unknown> | null;
+
+  serverData: Record<string, unknown> | null;
+
+  serverChangeId: string;
+
+  detectedAt: string;
+}
+
+// =====================================
 // MIND VAULT DATABASE
 // =====================================
 
@@ -76,6 +100,7 @@ class MindVaultDatabase extends Dexie {
   folders!: Table<LocalFolder, string>;
   syncQueue!: Table<LocalSyncChange, number>;
   syncMeta!: Table<LocalSyncMeta, string>;
+  conflicts!: Table<LocalConflict, string>;
 
   constructor() {
     super("MindVaultDatabase");
@@ -84,8 +109,9 @@ class MindVaultDatabase extends Dexie {
     this.version(1).stores({
       notes: "id, folderId, updatedAt, syncStatus",
       packs: "id, category, language",
-      syncQueue: "++id, &clientMutationId, [entityType+entityId], createdAt, status",
-      syncMeta: "key"
+      syncQueue:
+        "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+      syncMeta: "key",
     });
 
     // Database version 2: Added folders
@@ -93,8 +119,20 @@ class MindVaultDatabase extends Dexie {
       notes: "id, folderId, updatedAt, syncStatus",
       packs: "id, category, language",
       folders: "id, name, updatedAt, syncStatus",
-      syncQueue: "++id, &clientMutationId, [entityType+entityId], createdAt, status",
-      syncMeta: "key"
+      syncQueue:
+        "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+      syncMeta: "key",
+    });
+
+    // Database version 3: Added conflict storage
+    this.version(3).stores({
+      notes: "id, folderId, updatedAt, syncStatus",
+      packs: "id, category, language",
+      folders: "id, name, updatedAt, syncStatus",
+      syncQueue:
+        "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+      syncMeta: "key",
+      conflicts: "id, &[entityType+entityId], entityType, entityId, detectedAt",
     });
   }
 }

@@ -5,29 +5,56 @@ interface ApiOptions {
   body?: unknown;
 }
 
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 export async function apiRequest<T>(
   endpoint: string,
   options: ApiOptions = {}
 ): Promise<T> {
-  const response = await fetch(
-    `${API_URL}${endpoint}`,
-    {
+  let response: Response;
+
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
       method: options.method || "GET",
       credentials: "include",
       headers: {
         "Content-Type": "application/json"
       },
-      body: options.body
-        ? JSON.stringify(options.body)
-        : undefined
-    }
-  );
+      body:
+        options.body !== undefined
+          ? JSON.stringify(options.body)
+          : undefined
+    });
+  } catch {
+    throw new ApiError(
+      "Unable to connect to the server. Check your internet connection.",
+      0
+    );
+  }
 
-  const data = await response.json();
+  let data: any;
+
+  try {
+    data = await response.json();
+  } catch {
+    throw new ApiError(
+      "The server returned an invalid response.",
+      response.status
+    );
+  }
 
   if (!response.ok) {
-    throw new Error(
-      data.message || "Something went wrong"
+    throw new ApiError(
+      data.message || "Something went wrong.",
+      response.status
     );
   }
 

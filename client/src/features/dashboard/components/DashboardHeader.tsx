@@ -1,23 +1,136 @@
+import { useEffect, useState } from "react";
+
 import {
   Menu,
   Search,
   Bell,
   Wifi,
-  WifiOff
+  WifiOff,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 
 import { useAuthStore } from "../../../stores/auth.store";
+import { useSyncStore } from "../../../stores/sync.store";
 
 interface DashboardHeaderProps {
   onMenuClick: () => void;
 }
 
+async function checkInternetConnection(): Promise<boolean> {
+  if (!navigator.onLine) {
+    return false;
+  }
+
+  let timeoutId: number | undefined;
+
+  try {
+    const connectionCheck = fetch(
+      "https://www.gstatic.com/generate_204",
+      {
+        method: "GET",
+        mode: "no-cors",
+        cache: "no-store"
+      }
+    )
+      .then(() => true)
+      .catch(() => false);
+
+    const timeoutCheck = new Promise<boolean>((resolve) => {
+      timeoutId = window.setTimeout(() => {
+        resolve(false);
+      }, 4000);
+    });
+
+    return await Promise.race([
+      connectionCheck,
+      timeoutCheck
+    ]);
+  } catch {
+    return false;
+  } finally {
+    if (timeoutId !== undefined) {
+      window.clearTimeout(timeoutId);
+    }
+  }
+}
+
 function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const user = useAuthStore((state) => state.user);
-  const isOnline = navigator.onLine;
+
+  const status = useSyncStore((state) => state.status);
+  const lastSyncedAt = useSyncStore((state) => state.lastSyncedAt);
+  const syncNow = useSyncStore((state) => state.syncNow);
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const verifyConnection = async () => {
+      const connected = await checkInternetConnection();
+
+      if (mounted) {
+        setIsOnline(connected);
+      }
+    };
+
+    const handleOnline = () => {
+      void verifyConnection();
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    void verifyConnection();
+
+    const interval = window.setInterval(() => {
+      void verifyConnection();
+    }, 10000);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const statusDetails = {
+    idle: {
+      label: "Not synced yet",
+      color: "bg-gray-100 text-gray-600",
+    },
+    syncing: {
+      label: "Syncing...",
+      color: "bg-blue-100 text-blue-700",
+    },
+    synced: {
+      label: "Synced",
+      color: "bg-green-100 text-green-700",
+    },
+    error: {
+      label: "Sync failed",
+      color: "bg-red-100 text-red-700",
+    },
+    offline: {
+      label: "Waiting for internet",
+      color: "bg-orange-100 text-orange-700",
+    },
+  };
+
+  const currentStatus = isOnline
+    ? statusDetails[status]
+    : statusDetails.offline;
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center justify-between gap-4 border-b border-[#17243D]/5 bg-[#FFFAF1]/95 px-5 backdrop-blur-md md:px-8">
+    <header className="sticky top-0 z-30 flex min-h-20 items-center justify-between gap-4 border-b border-[#17243D]/5 bg-[#FFFAF1]/95 px-5 py-3 backdrop-blur-md md:px-8">
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuClick}
@@ -28,16 +141,13 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
         </button>
 
         <div className="hidden sm:block">
-          <h2 className="text-lg font-bold text-[#17243D]">
-            My Workspace
-          </h2>
-          <p className="text-xs text-gray-500">
-            Your personal knowledge space
-          </p>
+          <h2 className="text-lg font-bold text-[#17243D]">My Workspace</h2>
+
+          <p className="text-xs text-gray-500">Your personal knowledge space</p>
         </div>
       </div>
 
-      <div className="flex flex-1 items-center justify-end gap-3 md:gap-5">
+      <div className="flex flex-1 items-center justify-end gap-3 md:gap-4">
         <div className="relative hidden w-full max-w-md md:block">
           <Search
             size={19}
@@ -51,16 +161,52 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           />
         </div>
 
-        <div
-          className={`hidden items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold sm:flex ${
-            isOnline
-              ? "bg-green-100 text-green-700"
-              : "bg-orange-100 text-orange-700"
-          }`}
-        >
-          {isOnline ? <Wifi size={15} /> : <WifiOff size={15} />}
-          {isOnline ? "Online" : "Offline"}
+        <div className="hidden items-center gap-2 sm:flex">
+          {isOnline ? (
+            <Wifi size={16} className="text-green-600" />
+          ) : (
+            <WifiOff size={16} className="text-orange-600" />
+          )}
+
+          <span className="text-xs font-semibold text-gray-600">
+            {isOnline ? "Online" : "Offline"}
+          </span>
         </div>
+
+        <div
+          title={
+            lastSyncedAt
+              ? `Last synced: ${new Date(lastSyncedAt).toLocaleString()}`
+              : "No successful synchronization yet"
+          }
+          className={`hidden items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold sm:flex ${currentStatus.color}`}
+        >
+          {status === "syncing" && isOnline && (
+            <RefreshCw size={14} className="animate-spin" />
+          )}
+
+          {status === "synced" && isOnline && <CheckCircle2 size={14} />}
+
+          {status === "error" && isOnline && <AlertCircle size={14} />}
+
+          {currentStatus.label}
+        </div>
+
+        <button
+          onClick={() => void syncNow()}
+          disabled={!isOnline || status === "syncing"}
+          className="flex items-center gap-2 rounded-xl bg-[#17243D] px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-[#263958] disabled:cursor-not-allowed disabled:opacity-50 sm:px-4"
+          title="Synchronize your data"
+        >
+          <RefreshCw
+            size={15}
+            className={status === "syncing" ? "animate-spin" : ""}
+          />
+
+          <span className="hidden sm:inline">
+            {status === "syncing" ? "Syncing" : "Sync Now"}
+          </span>
+        </button>
 
         <button
           className="relative rounded-xl p-2.5 text-[#17243D] transition hover:bg-[#F8F1E5]"

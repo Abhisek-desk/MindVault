@@ -4,6 +4,9 @@ export interface IFolder extends Document {
   userId: mongoose.Types.ObjectId;
   name: string;
   color: string;
+  version: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const folderSchema = new Schema<IFolder>(
@@ -24,6 +27,13 @@ const folderSchema = new Schema<IFolder>(
     color: {
       type: String,
       default: "#F47768",
+    },
+
+    // Optimistic concurrency control.
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
   },
   {

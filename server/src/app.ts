@@ -11,6 +11,7 @@ import downloadRoutes from "./modules/downloads/download.routes";
 import learningRoutes from "./modules/learning/learning.routes";
 import aiRoutes from "./modules/ai/ai.routes";
 import syncRoutes from "./modules/sync/sync.routes";
+import path from "path";
 
 const app = express();
 
@@ -25,6 +26,37 @@ app.use(
 
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+// Temporary request diagnostic
+app.use((req, _res, next) => {
+  console.log("INCOMING REQUEST:", req.method, req.originalUrl);
+  next();
+});
+
+// Serve downloadable knowledge pack files
+const downloadsDirectory = path.resolve(
+  __dirname,
+  "../public/downloads"
+);
+
+console.log("Knowledge packs directory:", downloadsDirectory);
+
+app.get("/downloads/:filename", (req, res, next) => {
+  const filename = path.basename(req.params.filename);
+  const filePath = path.join(downloadsDirectory, filename);
+
+  console.log("Download requested:", filename);
+  console.log("File path:", filePath);
+
+  res.sendFile(filePath, (error) => {
+    if (error) {
+      console.error("Download error:", error.message);
+
+      if (!res.headersSent) {
+        next(error);
+      }
+    }
+  });
+});
 
 // Health check
 app.get("/api/v1/health", (_req, res) => {

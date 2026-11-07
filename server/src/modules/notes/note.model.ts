@@ -6,6 +6,7 @@ export interface INote extends Document {
   title: string;
   content: string;
   embedding?: number[];
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -35,10 +36,18 @@ const noteSchema = new Schema<INote>(
       type: String,
       default: "",
     },
+
     embedding: {
       type: [Number],
       default: undefined,
       select: false,
+    },
+
+    // Optimistic concurrency control.
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
   },
   {

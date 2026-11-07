@@ -1,15 +1,18 @@
 import { apiRequest } from "./api";
 
-import { db,type LocalNote,type LocalFolder,type LocalSyncChange } from "../db/database";
+import {
+  db,
+  type LocalNote,
+  type LocalFolder,
+  type LocalSyncChange,
+} from "../db/database";
 
 import {
   getPendingChanges,
   markChangeAsProcessing,
   markChangeAsFailed,
-  removeSyncChange,
   resetPendingChanges,
   getSyncCursor,
-  saveSyncCursor,
 } from "../db/sync.db";
 
 // =====================================
@@ -46,7 +49,7 @@ interface PullResponse {
 let syncInProgress = false;
 
 // =====================================
-// PUSH LOCAL CHANGES TO SERVER
+// MARK ENTITY AS SYNCED
 // =====================================
 
 const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
@@ -55,8 +58,13 @@ const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
     .equals([change.entityType, change.entityId])
     .count();
 
-  // Don't mark synced if another change is still queued.
   if (remainingChanges > 0) return;
+
+  // Never overwrite a conflict status.
+  const conflictId = `${change.entityType}:${change.entityId}`;
+  const conflict = await db.conflicts.get(conflictId);
+
+  if (conflict) return;
 
   if (change.entityType === "note") {
     await db.notes.update(change.entityId, {
@@ -71,8 +79,11 @@ const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
   }
 };
 
+// =====================================
+// PUSH LOCAL CHANGES TO SERVER
+// =====================================
+
 export const pushLocalChanges = async (): Promise<void> => {
-  // Process pending changes in batches of 50.
   while (true) {
     const pendingChanges = await getPendingChanges();
 
@@ -80,7 +91,24 @@ export const pushLocalChanges = async (): Promise<void> => {
       break;
     }
 
-    const batch = pendingChanges.slice(0, 50);
+    // Exclude changes belonging to unresolved conflicts.
+    const eligibleChanges = await Promise.all(
+      pendingChanges.map(async (change) => {
+        const conflictId = `${change.entityType}:${change.entityId}`;
+
+        const conflict = await db.conflicts.get(conflictId);
+
+        return conflict ? null : change;
+      }),
+    );
+
+    const batch = eligibleChanges
+      .filter((change): change is LocalSyncChange => change !== null)
+      .slice(0, 50);
+
+    if (batch.length === 0) {
+      break;
+    }
 
     const validChanges = batch.filter((change) => change.id !== undefined);
 
@@ -89,11 +117,12 @@ export const pushLocalChanges = async (): Promise<void> => {
     }
 
     try {
+      // Step 1: Mark changes as processing.
       for (const change of validChanges) {
-        await removeSyncChange(change.id!);
-        await markEntityAsSynced(change);
+        await markChangeAsProcessing(change.id!);
       }
 
+      // Step 2: Upload changes to the server.
       const response = await apiRequest<PushResponse>("/sync/push", {
         method: "POST",
         body: {
@@ -107,16 +136,32 @@ export const pushLocalChanges = async (): Promise<void> => {
         },
       });
 
+      // Step 3: Verify server confirmation.
       if (response.processed + response.duplicates !== validChanges.length) {
         throw new Error("Unexpected synchronization response");
       }
 
-      for (const change of validChanges) {
-        await removeSyncChange(change.id!);
-      }
+      // Step 4: Remove confirmed changes.
+      await db.transaction(
+        "rw",
+        db.syncQueue,
+        db.notes,
+        db.folders,
+        db.conflicts,
+        async () => {
+          for (const change of validChanges) {
+            await db.syncQueue.delete(change.id!);
+
+            await markEntityAsSynced(change);
+          }
+        },
+      );
+
+      console.log(`Successfully synchronized ${validChanges.length} changes.`);
     } catch (error) {
       console.error("Push synchronization failed:", error);
 
+      // Preserve changes for a future retry.
       for (const change of validChanges) {
         await markChangeAsFailed(change.id!);
       }
@@ -128,102 +173,200 @@ export const pushLocalChanges = async (): Promise<void> => {
 
 // =====================================
 // APPLY SERVER CHANGES LOCALLY
+// WITH CONFLICT DETECTION
 // =====================================
 
-const applyServerChanges = async (changes: ServerChange[]): Promise<void> => {
-  await db.transaction("rw", db.notes, db.folders, async () => {
-    for (const change of changes) {
-      const data = change.data ?? {};
+const applyServerChanges = async (
+  changes: ServerChange[],
+  nextCursor: string | null,
+): Promise<void> => {
+  await db.transaction(
+    "rw",
+    db.notes,
+    db.folders,
+    db.syncQueue,
+    db.conflicts,
+    db.syncMeta,
+    async () => {
+      for (const change of changes) {
+        // Check for pending local changes.
+        const hasLocalChanges = await db.syncQueue
+          .where("[entityType+entityId]")
+          .equals([change.entityType, change.entityId])
+          .count();
 
-      // =================================
-      // NOTE CHANGES
-      // =================================
+        // Check existing conflict.
+        const existingConflict = await db.conflicts.get(
+          `${change.entityType}:${change.entityId}`,
+        );
 
-      if (change.entityType === "note") {
-        if (change.operation === "delete") {
-          await db.notes.delete(change.entityId);
+        // =================================
+        // HANDLE CONFLICT
+        // =================================
+
+        if (hasLocalChanges > 0 || existingConflict) {
+          let localData: Record<string, unknown> | null = null;
+
+          // Preserve local note.
+          if (change.entityType === "note") {
+            const localNote = await db.notes.get(change.entityId);
+
+            if (localNote) {
+              localData = { ...localNote };
+            }
+          }
+
+          // Preserve local folder.
+          if (change.entityType === "folder") {
+            const localFolder = await db.folders.get(change.entityId);
+
+            if (localFolder) {
+              localData = { ...localFolder };
+            }
+          }
+
+          const conflict = {
+            id: `${change.entityType}:${change.entityId}`,
+            entityType: change.entityType,
+            entityId: change.entityId,
+            operation: change.operation,
+            localData,
+
+            // Preserve incoming server version.
+            serverData: change.data ?? null,
+
+            serverChangeId: change.id,
+
+            detectedAt:
+              existingConflict?.detectedAt ?? new Date().toISOString(),
+          };
+
+          await db.conflicts.put(conflict);
+
+          // Mark local entity as conflicted.
+          if (change.entityType === "note") {
+            await db.notes.update(change.entityId, {
+              syncStatus: "conflict",
+            });
+          }
+
+          if (change.entityType === "folder") {
+            await db.folders.update(change.entityId, {
+              syncStatus: "conflict",
+            });
+          }
+
+          console.log(
+            `Conflict detected: ${change.entityType} ${change.entityId}`,
+          );
+
           continue;
         }
 
-        const existingNote = await db.notes.get(change.entityId);
+        const data = change.data ?? {};
 
-        const note: LocalNote = {
-          id: change.entityId,
-          title:
-            typeof data.title === "string"
-              ? data.title
-              : (existingNote?.title ?? "Untitled"),
+        // =================================
+        // NOTE CHANGES
+        // =================================
 
-          content:
-            typeof data.content === "string"
-              ? data.content
-              : (existingNote?.content ?? ""),
+        if (change.entityType === "note") {
+          if (change.operation === "delete") {
+            await db.notes.delete(change.entityId);
+            continue;
+          }
 
-          folderId:
-            data.folderId === null
-              ? null
-              : typeof data.folderId === "string"
-                ? data.folderId
-                : (existingNote?.folderId ?? null),
+          const existingNote = await db.notes.get(change.entityId);
 
-          createdAt:
-            typeof data.createdAt === "string"
-              ? data.createdAt
-              : (existingNote?.createdAt ?? change.createdAt),
+          const note: LocalNote = {
+            id: change.entityId,
 
-          updatedAt:
-            typeof data.updatedAt === "string"
-              ? data.updatedAt
-              : change.createdAt,
+            title:
+              typeof data.title === "string"
+                ? data.title
+                : (existingNote?.title ?? "Untitled"),
 
-          syncStatus: "synced",
-        };
+            content:
+              typeof data.content === "string"
+                ? data.content
+                : (existingNote?.content ?? ""),
 
-        await db.notes.put(note);
-      }
+            folderId:
+              data.folderId === null
+                ? null
+                : typeof data.folderId === "string"
+                  ? data.folderId
+                  : (existingNote?.folderId ?? null),
 
-      // =================================
-      // FOLDER CHANGES
-      // =================================
+            createdAt:
+              typeof data.createdAt === "string"
+                ? data.createdAt
+                : (existingNote?.createdAt ?? change.createdAt),
 
-      if (change.entityType === "folder") {
-        if (change.operation === "delete") {
-          await db.folders.delete(change.entityId);
-          continue;
+            updatedAt:
+              typeof data.updatedAt === "string"
+                ? data.updatedAt
+                : change.createdAt,
+
+            syncStatus: "synced",
+          };
+
+          await db.notes.put(note);
         }
 
-        const existingFolder = await db.folders.get(change.entityId);
+        // =================================
+        // FOLDER CHANGES
+        // =================================
 
-        const folder: LocalFolder = {
-          id: change.entityId,
+        if (change.entityType === "folder") {
+          if (change.operation === "delete") {
+            await db.folders.delete(change.entityId);
+            continue;
+          }
 
-          name:
-            typeof data.name === "string"
-              ? data.name
-              : (existingFolder?.name ?? "Untitled folder"),
+          const existingFolder = await db.folders.get(change.entityId);
 
-          color:
-            typeof data.color === "string"
-              ? data.color
-              : (existingFolder?.color ?? "#F47768"),
+          const folder: LocalFolder = {
+            id: change.entityId,
 
-          createdAt:
-            typeof data.createdAt === "string"
-              ? data.createdAt
-              : (existingFolder?.createdAt ?? change.createdAt),
+            name:
+              typeof data.name === "string"
+                ? data.name
+                : (existingFolder?.name ?? "Untitled folder"),
 
-          updatedAt:
-            typeof data.updatedAt === "string"
-              ? data.updatedAt
-              : change.createdAt,
+            color:
+              typeof data.color === "string"
+                ? data.color
+                : (existingFolder?.color ?? "#F47768"),
 
-          syncStatus: "synced",
-        };
+            createdAt:
+              typeof data.createdAt === "string"
+                ? data.createdAt
+                : (existingFolder?.createdAt ?? change.createdAt),
 
-        await db.folders.put(folder);
+            updatedAt:
+              typeof data.updatedAt === "string"
+                ? data.updatedAt
+                : change.createdAt,
+
+            syncStatus: "synced",
+          };
+
+          await db.folders.put(folder);
+        }
       }
-    }
-  });
+
+      // =================================
+      // SAVE CURSOR ATOMICALLY
+      // =================================
+
+      if (nextCursor) {
+        await db.syncMeta.put({
+          key: "lastSyncCursor",
+          value: nextCursor,
+        });
+      }
+    },
+  );
 };
 
 // =====================================
@@ -244,12 +387,10 @@ export const pullServerChanges = async (): Promise<void> => {
       throw new Error("Failed to retrieve server changes");
     }
 
-    // Apply changes before saving the cursor.
-    await applyServerChanges(response.changes);
+    // Apply changes and save cursor atomically.
+    await applyServerChanges(response.changes, response.nextCursor);
 
-    // Save cursor only after local changes are committed.
     if (response.nextCursor) {
-      await saveSyncCursor(response.nextCursor);
       cursor = response.nextCursor;
     }
 
@@ -283,11 +424,11 @@ export const synchronizeData = async (): Promise<void> => {
     // Retry changes interrupted by an earlier session.
     await resetPendingChanges();
 
-    // Upload local changes first.
-    await pushLocalChanges();
-
-    // Download server changes afterward.
+    // FIRST: Pull server changes and detect conflicts.
     await pullServerChanges();
+
+    // SECOND: Push changes that have no unresolved conflicts.
+    await pushLocalChanges();
 
     console.log("Mind Vault synchronization completed.");
   } catch (error) {

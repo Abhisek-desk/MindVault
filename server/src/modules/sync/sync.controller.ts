@@ -1,3 +1,4 @@
+
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
@@ -10,12 +11,12 @@ import { recordSyncChange } from "./sync.service";
 
 import {
   pushSyncSchema,
-  pullSyncQuerySchema
+  pullSyncQuerySchema,
 } from "./sync.validation";
 
 export const pushSyncChanges = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   const session = await mongoose.startSession();
 
@@ -25,7 +26,7 @@ export const pushSyncChanges = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -36,7 +37,7 @@ export const pushSyncChanges = async (
       res.status(400).json({
         success: false,
         message: "Invalid synchronization data",
-        errors: validation.error.flatten()
+        errors: validation.error.flatten(),
       });
       return;
     }
@@ -53,28 +54,28 @@ export const pushSyncChanges = async (
         ) {
           return {
             change,
-            embedding: undefined
+            embedding: undefined,
           };
         }
 
         try {
           const embedding = await generateEmbedding(
-            `${change.data.title}\n${change.data.content ?? ""}`
+            `${change.data.title}\n${change.data.content ?? ""}`,
           );
 
           return {
             change,
-            embedding
+            embedding,
           };
         } catch (error) {
           console.error("Sync embedding generation failed:", error);
 
           return {
             change,
-            embedding: undefined
+            embedding: undefined,
           };
         }
-      })
+      }),
     );
 
     let processed = 0;
@@ -87,7 +88,7 @@ export const pushSyncChanges = async (
         // Prevent duplicate operations.
         const existingMutation = await SyncChange.findOne({
           userId,
-          clientMutationId: change.clientMutationId
+          clientMutationId: change.clientMutationId,
         }).session(session);
 
         if (existingMutation) {
@@ -100,7 +101,6 @@ export const pushSyncChanges = async (
         // =====================================
 
         if (change.entityType === "note") {
-
           // CREATE NOTE
           if (change.operation === "create") {
             if (!change.data?.title) {
@@ -110,7 +110,7 @@ export const pushSyncChanges = async (
             if (change.data.folderId) {
               const folder = await Folder.findOne({
                 _id: change.data.folderId,
-                userId
+                userId,
               }).session(session);
 
               if (!folder) {
@@ -119,7 +119,7 @@ export const pushSyncChanges = async (
             }
 
             const existingNote = await Note.findById(
-              change.entityId
+              change.entityId,
             ).session(session);
 
             if (existingNote) {
@@ -127,31 +127,38 @@ export const pushSyncChanges = async (
             }
 
             const [note] = await Note.create(
-              [{
-                _id: new mongoose.Types.ObjectId(change.entityId),
-                userId,
-                title: change.data.title,
-                content: change.data.content ?? "",
-                folderId: change.data.folderId
-                  ? new mongoose.Types.ObjectId(change.data.folderId)
-                  : null,
-                ...(embedding ? { embedding } : {})
-              }],
-              { session }
+              [
+                {
+                  _id: new mongoose.Types.ObjectId(change.entityId),
+                  userId,
+                  title: change.data.title,
+                  content: change.data.content ?? "",
+                  folderId: change.data.folderId
+                    ? new mongoose.Types.ObjectId(change.data.folderId)
+                    : null,
+                  version: 1,
+                  ...(embedding ? { embedding } : {}),
+                },
+              ],
+              { session },
             );
 
-            await recordSyncChange({
-              userId,
-              entityType: "note",
-              entityId: note._id.toString(),
-              operation: "create",
-              clientMutationId: change.clientMutationId,
-              data: {
-                title: note.title,
-                content: note.content,
-                folderId: note.folderId?.toString() ?? null
-              }
-            }, session);
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "note",
+                entityId: note._id.toString(),
+                operation: "create",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  title: note.title,
+                  content: note.content,
+                  folderId: note.folderId?.toString() ?? null,
+                  version: note.version,
+                },
+              },
+              session,
+            );
           }
 
           // UPDATE NOTE
@@ -160,19 +167,27 @@ export const pushSyncChanges = async (
               throw new Error("NOTE_UPDATE_DATA_REQUIRED");
             }
 
-            const note = await Note.findOne({
+            if (change.expectedVersion === undefined) {
+              throw new Error("NOTE_EXPECTED_VERSION_REQUIRED");
+            }
+
+            const existingNote = await Note.findOne({
               _id: change.entityId,
-              userId
+              userId,
             }).session(session);
 
-            if (!note) {
+            if (!existingNote) {
               throw new Error("NOTE_NOT_FOUND");
+            }
+
+            if (existingNote.version !== change.expectedVersion) {
+              throw new Error("NOTE_VERSION_CONFLICT");
             }
 
             if (change.data.folderId) {
               const folder = await Folder.findOne({
                 _id: change.data.folderId,
-                userId
+                userId,
               }).session(session);
 
               if (!folder) {
@@ -180,16 +195,18 @@ export const pushSyncChanges = async (
               }
             }
 
+            const updateFields: Record<string, unknown> = {};
+
             if (change.data.title !== undefined) {
-              note.title = change.data.title;
+              updateFields.title = change.data.title;
             }
 
             if (change.data.content !== undefined) {
-              note.content = change.data.content;
+              updateFields.content = change.data.content;
             }
 
             if (change.data.folderId !== undefined) {
-              note.folderId = change.data.folderId
+              updateFields.folderId = change.data.folderId
                 ? new mongoose.Types.ObjectId(change.data.folderId)
                 : null;
             }
@@ -198,46 +215,97 @@ export const pushSyncChanges = async (
               change.data.title !== undefined ||
               change.data.content !== undefined
             ) {
-              note.embedding = embedding ?? [];
+              if (embedding) {
+                updateFields.embedding = embedding;
+              }
             }
 
-            await note.save({ session });
+            const note = await Note.findOneAndUpdate(
+              {
+                _id: change.entityId,
+                userId,
+                version: change.expectedVersion,
+              },
+              {
+                $set: updateFields,
+                $inc: { version: 1 },
+              },
+              {
+                new: true,
+                runValidators: true,
+                session,
+              },
+            );
 
-            await recordSyncChange({
-              userId,
-              entityType: "note",
-              entityId: note._id.toString(),
-              operation: "update",
-              clientMutationId: change.clientMutationId,
-              data: {
-                title: note.title,
-                content: note.content,
-                folderId: note.folderId?.toString() ?? null
-              }
-            }, session);
+            if (!note) {
+              throw new Error("NOTE_VERSION_CONFLICT");
+            }
+
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "note",
+                entityId: note._id.toString(),
+                operation: "update",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  title: note.title,
+                  content: note.content,
+                  folderId: note.folderId?.toString() ?? null,
+                  version: note.version,
+                },
+              },
+              session,
+            );
           }
 
           // DELETE NOTE
           else if (change.operation === "delete") {
+            if (change.expectedVersion === undefined) {
+              throw new Error("NOTE_EXPECTED_VERSION_REQUIRED");
+            }
+
+            const existingNote = await Note.findOne({
+              _id: change.entityId,
+              userId,
+            }).session(session);
+
+            if (!existingNote) {
+              throw new Error("NOTE_NOT_FOUND");
+            }
+
+            if (existingNote.version !== change.expectedVersion) {
+              throw new Error("NOTE_VERSION_CONFLICT");
+            }
+
             const note = await Note.findOneAndDelete(
               {
                 _id: change.entityId,
-                userId
+                userId,
+                version: change.expectedVersion,
               },
-              { session }
+              { session },
             );
 
-            await recordSyncChange({
-              userId,
-              entityType: "note",
-              entityId: change.entityId,
-              operation: "delete",
-              clientMutationId: change.clientMutationId,
-              data: {
-                title: note?.title ?? "Deleted note",
-                deletedAt: new Date().toISOString()
-              }
-            }, session);
+            if (!note) {
+              throw new Error("NOTE_VERSION_CONFLICT");
+            }
+
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "note",
+                entityId: change.entityId,
+                operation: "delete",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  title: note.title,
+                  version: note.version,
+                  deletedAt: new Date().toISOString(),
+                },
+              },
+              session,
+            );
           }
         }
 
@@ -246,7 +314,6 @@ export const pushSyncChanges = async (
         // =====================================
 
         else if (change.entityType === "folder") {
-
           // CREATE FOLDER
           if (change.operation === "create") {
             if (!change.data?.name) {
@@ -254,7 +321,7 @@ export const pushSyncChanges = async (
             }
 
             const existingFolder = await Folder.findById(
-              change.entityId
+              change.entityId,
             ).session(session);
 
             if (existingFolder) {
@@ -262,26 +329,33 @@ export const pushSyncChanges = async (
             }
 
             const [folder] = await Folder.create(
-              [{
-                _id: new mongoose.Types.ObjectId(change.entityId),
-                userId,
-                name: change.data.name,
-                color: change.data.color ?? "#F47768"
-              }],
-              { session }
+              [
+                {
+                  _id: new mongoose.Types.ObjectId(change.entityId),
+                  userId,
+                  name: change.data.name,
+                  color: change.data.color ?? "#F47768",
+                  version: 1,
+                },
+              ],
+              { session },
             );
 
-            await recordSyncChange({
-              userId,
-              entityType: "folder",
-              entityId: folder._id.toString(),
-              operation: "create",
-              clientMutationId: change.clientMutationId,
-              data: {
-                name: folder.name,
-                color: folder.color
-              }
-            }, session);
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "folder",
+                entityId: folder._id.toString(),
+                operation: "create",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  name: folder.name,
+                  color: folder.color,
+                  version: folder.version,
+                },
+              },
+              session,
+            );
           }
 
           // UPDATE FOLDER
@@ -290,72 +364,127 @@ export const pushSyncChanges = async (
               throw new Error("FOLDER_UPDATE_DATA_REQUIRED");
             }
 
-            const folder = await Folder.findOne({
+            if (change.expectedVersion === undefined) {
+              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
+            }
+
+            const existingFolder = await Folder.findOne({
               _id: change.entityId,
-              userId
+              userId,
             }).session(session);
 
-            if (!folder) {
+            if (!existingFolder) {
               throw new Error("FOLDER_NOT_FOUND");
             }
 
+            if (existingFolder.version !== change.expectedVersion) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            const updateFields: Record<string, unknown> = {};
+
             if (change.data.name !== undefined) {
-              folder.name = change.data.name;
+              updateFields.name = change.data.name;
             }
 
             if (change.data.color !== undefined) {
-              folder.color = change.data.color;
+              updateFields.color = change.data.color;
             }
 
-            await folder.save({ session });
+            const folder = await Folder.findOneAndUpdate(
+              {
+                _id: change.entityId,
+                userId,
+                version: change.expectedVersion,
+              },
+              {
+                $set: updateFields,
+                $inc: { version: 1 },
+              },
+              {
+                new: true,
+                runValidators: true,
+                session,
+              },
+            );
 
-            await recordSyncChange({
-              userId,
-              entityType: "folder",
-              entityId: folder._id.toString(),
-              operation: "update",
-              clientMutationId: change.clientMutationId,
-              data: {
-                name: folder.name,
-                color: folder.color
-              }
-            }, session);
+            if (!folder) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "folder",
+                entityId: folder._id.toString(),
+                operation: "update",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  name: folder.name,
+                  color: folder.color,
+                  version: folder.version,
+                },
+              },
+              session,
+            );
           }
 
           // DELETE FOLDER
           else if (change.operation === "delete") {
-            const existingFolder = await Folder.findOne({
-              _id: change.entityId,
-              userId
-            }).session(session);
-
-            if (existingFolder) {
-              const notesInsideFolder = await Note.exists({
-                userId,
-                folderId: existingFolder._id
-              }).session(session);
-
-              if (notesInsideFolder) {
-                throw new Error("FOLDER_NOT_EMPTY");
-              }
-
-              await Folder.deleteOne({
-                _id: change.entityId,
-                userId
-              }).session(session);
+            if (change.expectedVersion === undefined) {
+              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
             }
 
-            await recordSyncChange({
+            const existingFolder = await Folder.findOne({
+              _id: change.entityId,
               userId,
-              entityType: "folder",
-              entityId: change.entityId,
-              operation: "delete",
-              clientMutationId: change.clientMutationId,
-              data: {
-                name: existingFolder?.name ?? "Deleted folder",
-                deletedAt: new Date().toISOString()
-              }
-            }, session);
+            }).session(session);
+
+            if (!existingFolder) {
+              throw new Error("FOLDER_NOT_FOUND");
+            }
+
+            if (existingFolder.version !== change.expectedVersion) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            const notesInsideFolder = await Note.exists({
+              userId,
+              folderId: existingFolder._id,
+            }).session(session);
+
+            if (notesInsideFolder) {
+              throw new Error("FOLDER_NOT_EMPTY");
+            }
+
+            const folder = await Folder.findOneAndDelete(
+              {
+                _id: change.entityId,
+                userId,
+                version: change.expectedVersion,
+              },
+              { session },
+            );
+
+            if (!folder) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            await recordSyncChange(
+              {
+                userId,
+                entityType: "folder",
+                entityId: change.entityId,
+                operation: "delete",
+                clientMutationId: change.clientMutationId,
+                data: {
+                  name: folder.name,
+                  version: folder.version,
+                  deletedAt: new Date().toISOString(),
+                },
+              },
+              session,
+            );
           }
         }
 
@@ -367,31 +496,36 @@ export const pushSyncChanges = async (
       success: true,
       message: "Synchronization completed successfully",
       processed,
-      duplicates
+      duplicates,
     });
-
   } catch (error) {
     console.error("Push sync error:", error);
 
-    const errorMessage =
-      error instanceof Error ? error.message : "";
+    const errorMessage = error instanceof Error ? error.message : "";
 
     const knownErrors: Record<string, string> = {
       NOTE_TITLE_REQUIRED: "Note title is required",
       NOTE_UPDATE_DATA_REQUIRED: "Note update data is required",
       NOTE_NOT_FOUND: "Note not found",
       NOTE_ALREADY_EXISTS: "A note with this ID already exists",
+      NOTE_EXPECTED_VERSION_REQUIRED: "Expected note version is required",
+      NOTE_VERSION_CONFLICT:
+        "This note has changed on the server. Synchronize before retrying",
+
       FOLDER_NOT_FOUND: "Folder not found",
       FOLDER_NAME_REQUIRED: "Folder name is required",
       FOLDER_UPDATE_DATA_REQUIRED: "Folder update data is required",
       FOLDER_ALREADY_EXISTS: "A folder with this ID already exists",
-      FOLDER_NOT_EMPTY: "Delete or move the notes inside this folder first"
+      FOLDER_NOT_EMPTY: "Delete or move the notes inside this folder first",
+      FOLDER_EXPECTED_VERSION_REQUIRED: "Expected folder version is required",
+      FOLDER_VERSION_CONFLICT:
+        "This folder has changed on the server. Synchronize before retrying",
     };
 
     if (knownErrors[errorMessage]) {
       res.status(409).json({
         success: false,
-        message: knownErrors[errorMessage]
+        message: knownErrors[errorMessage],
       });
       return;
     }
@@ -405,16 +539,15 @@ export const pushSyncChanges = async (
     ) {
       res.status(409).json({
         success: false,
-        message: "A folder with this name already exists"
+        message: "A folder with this name already exists",
       });
       return;
     }
 
     res.status(500).json({
       success: false,
-      message: "Failed to synchronize changes"
+      message: "Failed to synchronize changes",
     });
-
   } finally {
     await session.endSession();
   }
@@ -426,7 +559,7 @@ export const pushSyncChanges = async (
 
 export const pullSyncChanges = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = req.userId;
@@ -434,7 +567,7 @@ export const pullSyncChanges = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -445,7 +578,7 @@ export const pullSyncChanges = async (
       res.status(400).json({
         success: false,
         message: "Invalid synchronization cursor or limit",
-        errors: validation.error.flatten()
+        errors: validation.error.flatten(),
       });
       return;
     }
@@ -453,12 +586,12 @@ export const pullSyncChanges = async (
     const { cursor, limit } = validation.data;
 
     const filter: Record<string, unknown> = {
-      userId
+      userId,
     };
 
     if (cursor) {
       filter._id = {
-        $gt: new mongoose.Types.ObjectId(cursor)
+        $gt: new mongoose.Types.ObjectId(cursor),
       };
     }
 
@@ -469,14 +602,12 @@ export const pullSyncChanges = async (
 
     const hasMore = changes.length > limit;
 
-    const results = hasMore
-      ? changes.slice(0, limit)
-      : changes;
+    const results = hasMore ? changes.slice(0, limit) : changes;
 
     const nextCursor =
       results.length > 0
         ? results[results.length - 1]._id.toString()
-        : cursor ?? null;
+        : (cursor ?? null);
 
     res.status(200).json({
       success: true,
@@ -489,16 +620,16 @@ export const pullSyncChanges = async (
         entityId: change.entityId,
         operation: change.operation,
         data: change.data,
-        createdAt: change.createdAt
-      }))
+        clientMutationId: change.clientMutationId,
+        createdAt: change.createdAt,
+      })),
     });
-
   } catch (error) {
     console.error("Pull sync error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to retrieve synchronization changes"
+      message: "Failed to retrieve synchronization changes",
     });
   }
 };

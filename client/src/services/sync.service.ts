@@ -30,6 +30,7 @@ interface ServerChange {
   entityType: "note" | "folder";
   entityId: string;
   operation: "create" | "update" | "delete";
+  clientMutationId?: string;
   data?: Record<string, unknown>;
   createdAt: string;
 }
@@ -49,10 +50,40 @@ interface PullResponse {
 let syncInProgress = false;
 
 // =====================================
+// GET CURRENT ENTITY VERSION
+// =====================================
+
+const getEntityVersion = async (
+  change: LocalSyncChange,
+): Promise<number> => {
+  if (change.expectedVersion !== undefined) {
+    return change.expectedVersion;
+  }
+
+  if (change.entityType === "note") {
+    const note = await db.notes.get(change.entityId);
+
+    if (note) return note.version;
+  }
+
+  if (change.entityType === "folder") {
+    const folder = await db.folders.get(change.entityId);
+
+    if (folder) return folder.version;
+  }
+
+  throw new Error(
+    `Cannot determine expected version for ${change.entityType} ${change.entityId}`,
+  );
+};
+
+// =====================================
 // MARK ENTITY AS SYNCED
 // =====================================
 
-const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
+const markEntityAsSynced = async (
+  change: LocalSyncChange,
+): Promise<void> => {
   const remainingChanges = await db.syncQueue
     .where("[entityType+entityId]")
     .equals([change.entityType, change.entityId])
@@ -60,8 +91,8 @@ const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
 
   if (remainingChanges > 0) return;
 
-  // Never overwrite a conflict status.
   const conflictId = `${change.entityType}:${change.entityId}`;
+
   const conflict = await db.conflicts.get(conflictId);
 
   if (conflict) return;
@@ -76,6 +107,60 @@ const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
     await db.folders.update(change.entityId, {
       syncStatus: "synced",
     });
+  }
+};
+
+// =====================================
+// UPDATE LOCAL VERSION AFTER PUSH
+// =====================================
+
+const updateLocalVersionAfterPush = async (
+  change: LocalSyncChange,
+): Promise<void> => {
+  if (change.operation === "delete") {
+    return;
+  }
+
+  let newVersion = 1;
+
+  if (change.operation === "update") {
+    const expectedVersion = await getEntityVersion(change);
+
+    newVersion = expectedVersion + 1;
+  }
+
+  if (
+    change.operation === "create" &&
+    typeof change.data?.version === "number"
+  ) {
+    newVersion = change.data.version;
+  }
+
+  if (change.entityType === "note") {
+    await db.notes.update(change.entityId, {
+      version: newVersion,
+    });
+  }
+
+  if (change.entityType === "folder") {
+    await db.folders.update(change.entityId, {
+      version: newVersion,
+    });
+  }
+
+  // An edit or deletion may have been queued while this
+  // operation was being uploaded. Advance its expected version.
+  const remainingChanges = await db.syncQueue
+    .where("[entityType+entityId]")
+    .equals([change.entityType, change.entityId])
+    .toArray();
+
+  for (const queuedChange of remainingChanges) {
+    if (queuedChange.operation !== "create") {
+      await db.syncQueue.update(queuedChange.id!, {
+        expectedVersion: newVersion,
+      });
+    }
   }
 };
 
@@ -103,45 +188,81 @@ export const pushLocalChanges = async (): Promise<void> => {
     );
 
     const batch = eligibleChanges
-      .filter((change): change is LocalSyncChange => change !== null)
+      .filter(
+        (change): change is LocalSyncChange => change !== null,
+      )
       .slice(0, 50);
 
     if (batch.length === 0) {
       break;
     }
 
-    const validChanges = batch.filter((change) => change.id !== undefined);
+    const validChanges = batch.filter(
+      (change) => change.id !== undefined,
+    );
 
     if (validChanges.length === 0) {
       break;
     }
 
     try {
-      // Step 1: Mark changes as processing.
-      for (const change of validChanges) {
-        await markChangeAsProcessing(change.id!);
-      }
+      // Step 1: Prepare expected versions.
+      const payloadChanges = await Promise.all(
+        validChanges.map(async (change) => {
+          if (change.operation === "create") {
+            return {
+              entityType: change.entityType,
+              entityId: change.entityId,
+              operation: change.operation,
+              clientMutationId: change.clientMutationId,
+              ...(change.data !== undefined
+                ? { data: change.data }
+                : {}),
+            };
+          }
 
-      // Step 2: Upload changes to the server.
-      const response = await apiRequest<PushResponse>("/sync/push", {
-        method: "POST",
-        body: {
-          changes: validChanges.map((change) => ({
+          const expectedVersion = await getEntityVersion(change);
+
+          return {
             entityType: change.entityType,
             entityId: change.entityId,
             operation: change.operation,
             clientMutationId: change.clientMutationId,
-            ...(change.data !== undefined ? { data: change.data } : {}),
-          })),
-        },
-      });
+            expectedVersion,
+            ...(change.data !== undefined
+              ? { data: change.data }
+              : {}),
+          };
+        }),
+      );
 
-      // Step 3: Verify server confirmation.
-      if (response.processed + response.duplicates !== validChanges.length) {
-        throw new Error("Unexpected synchronization response");
+      // Step 2: Mark changes as processing.
+      for (const change of validChanges) {
+        await markChangeAsProcessing(change.id!);
       }
 
-      // Step 4: Remove confirmed changes.
+      // Step 3: Upload changes to the server.
+      const response = await apiRequest<PushResponse>(
+        "/sync/push",
+        {
+          method: "POST",
+          body: {
+            changes: payloadChanges,
+          },
+        },
+      );
+
+      // Step 4: Verify server confirmation.
+      if (
+        response.processed + response.duplicates !==
+        validChanges.length
+      ) {
+        throw new Error(
+          "Unexpected synchronization response",
+        );
+      }
+
+      // Step 5: Update versions and remove confirmed changes.
       await db.transaction(
         "rw",
         db.syncQueue,
@@ -152,14 +273,21 @@ export const pushLocalChanges = async (): Promise<void> => {
           for (const change of validChanges) {
             await db.syncQueue.delete(change.id!);
 
+            await updateLocalVersionAfterPush(change);
+
             await markEntityAsSynced(change);
           }
         },
       );
 
-      console.log(`Successfully synchronized ${validChanges.length} changes.`);
+      console.log(
+        `Successfully synchronized ${validChanges.length} changes.`,
+      );
     } catch (error) {
-      console.error("Push synchronization failed:", error);
+      console.error(
+        "Push synchronization failed:",
+        error,
+      );
 
       // Preserve changes for a future retry.
       for (const change of validChanges) {
@@ -189,16 +317,16 @@ const applyServerChanges = async (
     db.syncMeta,
     async () => {
       for (const change of changes) {
-        // Check for pending local changes.
         const hasLocalChanges = await db.syncQueue
           .where("[entityType+entityId]")
           .equals([change.entityType, change.entityId])
           .count();
 
-        // Check existing conflict.
-        const existingConflict = await db.conflicts.get(
-          `${change.entityType}:${change.entityId}`,
-        );
+        const conflictId =
+          `${change.entityType}:${change.entityId}`;
+
+        const existingConflict =
+          await db.conflicts.get(conflictId);
 
         // =================================
         // HANDLE CONFLICT
@@ -207,18 +335,20 @@ const applyServerChanges = async (
         if (hasLocalChanges > 0 || existingConflict) {
           let localData: Record<string, unknown> | null = null;
 
-          // Preserve local note.
           if (change.entityType === "note") {
-            const localNote = await db.notes.get(change.entityId);
+            const localNote = await db.notes.get(
+              change.entityId,
+            );
 
             if (localNote) {
               localData = { ...localNote };
             }
           }
 
-          // Preserve local folder.
           if (change.entityType === "folder") {
-            const localFolder = await db.folders.get(change.entityId);
+            const localFolder = await db.folders.get(
+              change.entityId,
+            );
 
             if (localFolder) {
               localData = { ...localFolder };
@@ -226,24 +356,20 @@ const applyServerChanges = async (
           }
 
           const conflict = {
-            id: `${change.entityType}:${change.entityId}`,
+            id: conflictId,
             entityType: change.entityType,
             entityId: change.entityId,
             operation: change.operation,
             localData,
-
-            // Preserve incoming server version.
             serverData: change.data ?? null,
-
             serverChangeId: change.id,
-
             detectedAt:
-              existingConflict?.detectedAt ?? new Date().toISOString(),
+              existingConflict?.detectedAt ??
+              new Date().toISOString(),
           };
 
           await db.conflicts.put(conflict);
 
-          // Mark local entity as conflicted.
           if (change.entityType === "note") {
             await db.notes.update(change.entityId, {
               syncStatus: "conflict",
@@ -275,7 +401,9 @@ const applyServerChanges = async (
             continue;
           }
 
-          const existingNote = await db.notes.get(change.entityId);
+          const existingNote = await db.notes.get(
+            change.entityId,
+          );
 
           const note: LocalNote = {
             id: change.entityId,
@@ -283,24 +411,29 @@ const applyServerChanges = async (
             title:
               typeof data.title === "string"
                 ? data.title
-                : (existingNote?.title ?? "Untitled"),
+                : existingNote?.title ?? "Untitled",
 
             content:
               typeof data.content === "string"
                 ? data.content
-                : (existingNote?.content ?? ""),
+                : existingNote?.content ?? "",
 
             folderId:
               data.folderId === null
                 ? null
                 : typeof data.folderId === "string"
                   ? data.folderId
-                  : (existingNote?.folderId ?? null),
+                  : existingNote?.folderId ?? null,
+
+            version:
+              typeof data.version === "number"
+                ? data.version
+                : existingNote?.version ?? 1,
 
             createdAt:
               typeof data.createdAt === "string"
                 ? data.createdAt
-                : (existingNote?.createdAt ?? change.createdAt),
+                : existingNote?.createdAt ?? change.createdAt,
 
             updatedAt:
               typeof data.updatedAt === "string"
@@ -323,7 +456,9 @@ const applyServerChanges = async (
             continue;
           }
 
-          const existingFolder = await db.folders.get(change.entityId);
+          const existingFolder = await db.folders.get(
+            change.entityId,
+          );
 
           const folder: LocalFolder = {
             id: change.entityId,
@@ -331,17 +466,22 @@ const applyServerChanges = async (
             name:
               typeof data.name === "string"
                 ? data.name
-                : (existingFolder?.name ?? "Untitled folder"),
+                : existingFolder?.name ?? "Untitled folder",
 
             color:
               typeof data.color === "string"
                 ? data.color
-                : (existingFolder?.color ?? "#F47768"),
+                : existingFolder?.color ?? "#F47768",
+
+            version:
+              typeof data.version === "number"
+                ? data.version
+                : existingFolder?.version ?? 1,
 
             createdAt:
               typeof data.createdAt === "string"
                 ? data.createdAt
-                : (existingFolder?.createdAt ?? change.createdAt),
+                : existingFolder?.createdAt ?? change.createdAt,
 
             updatedAt:
               typeof data.updatedAt === "string"
@@ -384,11 +524,15 @@ export const pullServerChanges = async (): Promise<void> => {
     const response = await apiRequest<PullResponse>(endpoint);
 
     if (!response.success) {
-      throw new Error("Failed to retrieve server changes");
+      throw new Error(
+        "Failed to retrieve server changes",
+      );
     }
 
-    // Apply changes and save cursor atomically.
-    await applyServerChanges(response.changes, response.nextCursor);
+    await applyServerChanges(
+      response.changes,
+      response.nextCursor,
+    );
 
     if (response.nextCursor) {
       cursor = response.nextCursor;
@@ -399,7 +543,9 @@ export const pullServerChanges = async (): Promise<void> => {
     }
 
     if (!response.nextCursor) {
-      throw new Error("Server returned an invalid sync cursor");
+      throw new Error(
+        "Server returned an invalid sync cursor",
+      );
     }
   }
 };
@@ -414,7 +560,10 @@ export const synchronizeData = async (): Promise<void> => {
   }
 
   if (!navigator.onLine) {
-    console.log("Mind Vault is offline. Sync postponed.");
+    console.log(
+      "Mind Vault is offline. Sync postponed.",
+    );
+
     return;
   }
 
@@ -427,12 +576,18 @@ export const synchronizeData = async (): Promise<void> => {
     // FIRST: Pull server changes and detect conflicts.
     await pullServerChanges();
 
-    // SECOND: Push changes that have no unresolved conflicts.
+    // SECOND: Push changes without unresolved conflicts.
     await pushLocalChanges();
 
-    console.log("Mind Vault synchronization completed.");
+    console.log(
+      "Mind Vault synchronization completed.",
+    );
   } catch (error) {
-    console.error("Mind Vault synchronization failed:", error);
+    console.error(
+      "Mind Vault synchronization failed:",
+      error,
+    );
+
     throw error;
   } finally {
     syncInProgress = false;

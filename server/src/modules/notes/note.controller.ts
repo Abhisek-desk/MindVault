@@ -347,7 +347,16 @@ export const updateNote = async (
       );
 
       if (!updatedNote) {
-        throw new Error("Note not found during update");
+        const currentNote = await Note.findOne({
+          _id: id,
+          userId,
+        }).session(session);
+
+        if (!currentNote) {
+          throw new Error("NOTE_NOT_FOUND");
+        }
+
+        throw new Error("NOTE_VERSION_CONFLICT");
       }
 
       await recordSyncChange(
@@ -362,6 +371,7 @@ export const updateNote = async (
             folderId: updatedNote.folderId?.toString() ?? null,
             createdAt: updatedNote.createdAt.toISOString(),
             updatedAt: updatedNote.updatedAt.toISOString(),
+            version: updatedNote.version,
           },
         },
         session,
@@ -374,6 +384,24 @@ export const updateNote = async (
       note: updatedNote,
     });
   } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "NOTE_NOT_FOUND") {
+        res.status(404).json({
+          success: false,
+          message: "Note not found",
+        });
+        return;
+      }
+
+      if (error.message === "NOTE_VERSION_CONFLICT") {
+        res.status(409).json({
+          success: false,
+          message:
+            "Note was modified by another device. Please sync and resolve the conflict.",
+        });
+        return;
+      }
+    }
     console.error("Update note error:", error);
 
     res.status(500).json({

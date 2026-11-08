@@ -77,7 +77,9 @@ export const createNote = async (
     let embedding: number[] | undefined;
 
     try {
-      embedding = await generateEmbedding(`${title.trim()}\n${content ?? ""}`);
+      embedding = await generateEmbedding(
+        `${title.trim()}\n${content ?? ""}`,
+      );
     } catch (error) {
       console.error("Note embedding generation failed:", error);
     }
@@ -90,6 +92,7 @@ export const createNote = async (
             title: title.trim(),
             content: content ?? "",
             folderId: folderId ?? null,
+            version: 1,
             ...(embedding ? { embedding } : {}),
           },
         ],
@@ -136,7 +139,10 @@ export const createNote = async (
 // GET NOTES
 // ========================================
 
-export const getNotes = async (req: Request, res: Response): Promise<void> => {
+export const getNotes = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
   try {
     const userId = req.userId;
 
@@ -173,7 +179,9 @@ export const getNotes = async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    const notes = await Note.find(filter).sort({ updatedAt: -1 });
+    const notes = await Note.find(filter).sort({
+      updatedAt: -1,
+    });
 
     res.status(200).json({
       success: true,
@@ -203,7 +211,13 @@ export const updateNote = async (
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const { title, content, folderId, expectedVersion } = req.body;
+
+    const {
+      title,
+      content,
+      folderId,
+      expectedVersion,
+    } = req.body;
 
     if (!userId) {
       res.status(401).json({
@@ -221,6 +235,18 @@ export const updateNote = async (
       return;
     }
 
+    // Validate expected version.
+    if (
+      !Number.isInteger(expectedVersion) ||
+      expectedVersion < 1
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid expectedVersion is required",
+      });
+      return;
+    }
+
     const updates: {
       title?: string;
       content?: string;
@@ -228,6 +254,7 @@ export const updateNote = async (
       embedding?: number[];
     } = {};
 
+    // Validate title.
     if (title !== undefined) {
       if (
         typeof title !== "string" ||
@@ -244,6 +271,7 @@ export const updateNote = async (
       updates.title = title.trim();
     }
 
+    // Validate content.
     if (content !== undefined) {
       if (typeof content !== "string") {
         res.status(400).json({
@@ -256,6 +284,7 @@ export const updateNote = async (
       updates.content = content;
     }
 
+    // Validate folder.
     if (folderId !== undefined) {
       if (folderId === null) {
         updates.folderId = null;
@@ -296,7 +325,7 @@ export const updateNote = async (
       return;
     }
 
-    // Retrieve the existing note.
+    // Retrieve existing note.
     const existingNote = await Note.findOne({
       _id: id,
       userId,
@@ -311,7 +340,10 @@ export const updateNote = async (
     }
 
     // Regenerate embedding when title or content changes.
-    if (updates.title !== undefined || updates.content !== undefined) {
+    if (
+      updates.title !== undefined ||
+      updates.content !== undefined
+    ) {
       const finalTitle = updates.title ?? existingNote.title;
       const finalContent = updates.content ?? existingNote.content;
 
@@ -320,15 +352,19 @@ export const updateNote = async (
           `${finalTitle}\n${finalContent}`,
         );
       } catch (error) {
-        console.error("Updated note embedding generation failed:", error);
+        console.error(
+          "Updated note embedding generation failed:",
+          error,
+        );
 
-        updates.embedding = [];
+        // Keep the existing embedding if generation fails.
       }
     }
 
     let updatedNote: typeof existingNote | null = null;
 
     await session.withTransaction(async () => {
+      // Atomic optimistic concurrency check.
       updatedNote = await Note.findOneAndUpdate(
         {
           _id: id,
@@ -337,7 +373,9 @@ export const updateNote = async (
         },
         {
           $set: updates,
-          $inc: { version: 1 },
+          $inc: {
+            version: 1,
+          },
         },
         {
           new: true,
@@ -359,6 +397,7 @@ export const updateNote = async (
         throw new Error("NOTE_VERSION_CONFLICT");
       }
 
+      // Record version-aware sync event.
       await recordSyncChange(
         {
           userId,
@@ -369,9 +408,9 @@ export const updateNote = async (
             title: updatedNote.title,
             content: updatedNote.content,
             folderId: updatedNote.folderId?.toString() ?? null,
+            version: updatedNote.version,
             createdAt: updatedNote.createdAt.toISOString(),
             updatedAt: updatedNote.updatedAt.toISOString(),
-            version: updatedNote.version,
           },
         },
         session,
@@ -402,6 +441,7 @@ export const updateNote = async (
         return;
       }
     }
+
     console.error("Update note error:", error);
 
     res.status(500).json({
@@ -426,6 +466,7 @@ export const deleteNote = async (
   try {
     const userId = req.userId;
     const { id } = req.params;
+    const { expectedVersion } = req.body ?? {};
 
     if (!userId) {
       res.status(401).json({
@@ -443,19 +484,43 @@ export const deleteNote = async (
       return;
     }
 
+    // Validate expected version.
+    if (
+      !Number.isInteger(expectedVersion) ||
+      expectedVersion < 1
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid expectedVersion is required",
+      });
+      return;
+    }
+
     await session.withTransaction(async () => {
+      // Delete only if the version matches.
       const note = await Note.findOneAndDelete(
         {
           _id: id,
           userId,
+          version: expectedVersion,
         },
         { session },
       );
 
       if (!note) {
-        throw new Error("NOTE_NOT_FOUND");
+        const currentNote = await Note.findOne({
+          _id: id,
+          userId,
+        }).session(session);
+
+        if (!currentNote) {
+          throw new Error("NOTE_NOT_FOUND");
+        }
+
+        throw new Error("NOTE_VERSION_CONFLICT");
       }
 
+      // Preserve deleted note version in the sync tombstone.
       await recordSyncChange(
         {
           userId,
@@ -464,6 +529,7 @@ export const deleteNote = async (
           operation: "delete",
           data: {
             title: note.title,
+            version: note.version,
             deletedAt: new Date().toISOString(),
           },
         },
@@ -476,12 +542,23 @@ export const deleteNote = async (
       message: "Note deleted successfully",
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "NOTE_NOT_FOUND") {
-      res.status(404).json({
-        success: false,
-        message: "Note not found",
-      });
-      return;
+    if (error instanceof Error) {
+      if (error.message === "NOTE_NOT_FOUND") {
+        res.status(404).json({
+          success: false,
+          message: "Note not found",
+        });
+        return;
+      }
+
+      if (error.message === "NOTE_VERSION_CONFLICT") {
+        res.status(409).json({
+          success: false,
+          message:
+            "Note was modified by another device. Please sync and resolve the conflict.",
+        });
+        return;
+      }
     }
 
     console.error("Delete note error:", error);

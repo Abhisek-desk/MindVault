@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "motion/react";
 
 import {
   Plus,
@@ -10,7 +9,7 @@ import {
   Clock,
   Wifi,
   WifiOff,
-  ArrowLeft
+  ArrowLeft,
 } from "lucide-react";
 
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -22,7 +21,7 @@ import {
   createLocalNote,
   getLocalNotes,
   updateLocalNote,
-  deleteLocalNote
+  deleteLocalNote,
 } from "../../../db/note.db";
 
 import type { LocalNote } from "../../../db/database";
@@ -55,51 +54,47 @@ function NotesPage() {
   };
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  const initializeNotes = async () => {
-    try {
-      const localNotes = await getLocalNotes();
+    const initializeNotes = async () => {
+      try {
+        const localNotes = await getLocalNotes();
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      setNotes(localNotes);
+        setNotes(localNotes);
 
-      if (requestedNoteId) {
-        const requestedNote = localNotes.find(
-          (note) => note.id === requestedNoteId
-        );
+        if (requestedNoteId) {
+          const requestedNote = localNotes.find(
+            (note) => note.id === requestedNoteId,
+          );
 
-        if (requestedNote) {
-          setSelectedNoteId(requestedNote.id);
-          setTitle(requestedNote.title);
-          setContent(requestedNote.content);
-          setIsCreating(false);
-          setError("");
+          if (requestedNote) {
+            setSelectedNoteId(requestedNote.id);
+            setTitle(requestedNote.title);
+            setContent(requestedNote.content);
+            setIsCreating(false);
+            setError("");
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error ? err.message : "Unable to load your notes.",
+          );
         }
       }
-    } catch (err) {
-      if (!cancelled) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Unable to load your notes."
-        );
-      }
-    }
-  };
+    };
 
-  void initializeNotes();
+    void initializeNotes();
 
-  return () => {
-    cancelled = true;
-  };
-}, [requestedNoteId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [requestedNoteId]);
 
   // SELECTED NOTE
-  const selectedNote = notes.find(
-    (note) => note.id === selectedNoteId
-  );
+  const selectedNote = notes.find((note) => note.id === selectedNoteId);
 
   // SEARCH NOTES
   const filteredNotes = useMemo(() => {
@@ -110,7 +105,7 @@ function NotesPage() {
     return notes.filter(
       (note) =>
         note.title.toLowerCase().includes(query) ||
-        note.content.toLowerCase().includes(query)
+        note.content.toLowerCase().includes(query),
     );
   }, [notes, search]);
 
@@ -147,7 +142,7 @@ function NotesPage() {
       if (selectedNoteId) {
         await updateLocalNote(selectedNoteId, {
           title,
-          content
+          content,
         });
       } else {
         const newNote = await createLocalNote(title, content);
@@ -157,12 +152,9 @@ function NotesPage() {
       }
 
       await loadNotes();
-
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save your note."
+        err instanceof Error ? err.message : "Unable to save your note.",
       );
     } finally {
       setIsSaving(false);
@@ -174,7 +166,7 @@ function NotesPage() {
     if (!selectedNoteId) return;
 
     const confirmed = window.confirm(
-      "Are you sure you want to delete this note?"
+      "Are you sure you want to delete this note?",
     );
 
     if (!confirmed) return;
@@ -188,12 +180,9 @@ function NotesPage() {
       setIsCreating(false);
 
       await loadNotes();
-
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete this note."
+        err instanceof Error ? err.message : "Unable to delete this note.",
       );
     }
   };
@@ -209,30 +198,21 @@ function NotesPage() {
     return parsedDate.toLocaleDateString(undefined, {
       day: "numeric",
       month: "short",
-      year: "numeric"
+      year: "numeric",
     });
   };
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5]">
-
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       <main className="min-w-0 flex-1">
-
-        <DashboardHeader
-          onMenuClick={() => setIsSidebarOpen(true)}
-        />
+        <DashboardHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
         <div className="mx-auto max-w-[1600px] p-5 md:p-8">
-
           {/* PAGE HEADING */}
 
           <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
-
             <div>
               <button
                 onClick={() => navigate("/dashboard")}
@@ -242,9 +222,7 @@ function NotesPage() {
                 Back to Dashboard
               </button>
 
-              <h1 className="text-3xl font-bold text-[#17243D]">
-                My Notes
-              </h1>
+              <h1 className="text-3xl font-bold text-[#17243D]">My Notes</h1>
 
               <p className="mt-2 text-sm text-gray-500">
                 Capture, organize and manage your knowledge.
@@ -258,13 +236,11 @@ function NotesPage() {
               <Plus size={19} />
               New Note
             </button>
-
           </div>
 
           {/* OFFLINE STATUS */}
 
           <div className="mb-6 flex items-center gap-2 text-sm">
-
             {isOnline ? (
               <>
                 <Wifi size={17} className="text-green-600" />
@@ -282,33 +258,25 @@ function NotesPage() {
                 </span>
               </>
             )}
-
           </div>
 
           {/* NOTES WORKSPACE */}
 
           <div className="grid min-h-[650px] grid-cols-1 gap-6 lg:grid-cols-3">
-
             {/* NOTES LIST */}
 
             <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm">
-
               <div className="mb-5 flex items-center justify-between">
-
-                <h2 className="font-bold text-[#17243D]">
-                  All Notes
-                </h2>
+                <h2 className="font-bold text-[#17243D]">All Notes</h2>
 
                 <span className="rounded-full bg-[#F47768]/10 px-3 py-1 text-xs font-semibold text-[#F47768]">
                   {notes.length} Notes
                 </span>
-
               </div>
 
               {/* SEARCH */}
 
               <div className="relative mb-5">
-
                 <Search
                   size={18}
                   className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -321,34 +289,23 @@ function NotesPage() {
                   onChange={(event) => setSearch(event.target.value)}
                   className="w-full rounded-xl border border-[#17243D]/10 bg-[#F8F1E5]/60 py-3 pl-10 pr-4 text-sm outline-none focus:border-[#F47768]"
                 />
-
               </div>
 
               {/* NOTE ITEMS */}
 
               <div className="space-y-3">
-
                 {filteredNotes.length === 0 ? (
-
                   <div className="py-12 text-center">
-
-                    <FileText
-                      size={35}
-                      className="mx-auto text-gray-300"
-                    />
+                    <FileText size={35} className="mx-auto text-gray-300" />
 
                     <p className="mt-3 text-sm font-medium text-gray-500">
                       {search
                         ? "No matching notes found."
                         : "No notes created yet."}
                     </p>
-
                   </div>
-
                 ) : (
-
                   filteredNotes.map((note) => (
-
                     <button
                       key={note.id}
                       onClick={() => handleSelectNote(note)}
@@ -358,15 +315,12 @@ function NotesPage() {
                           : "border-[#17243D]/5 hover:border-[#F47768]/40 hover:bg-[#F8F1E5]/60"
                       }`}
                     >
-
                       <div className="flex items-start gap-3">
-
                         <div className="rounded-lg bg-[#F47768]/10 p-2 text-[#F47768]">
                           <FileText size={19} />
                         </div>
 
                         <div className="min-w-0 flex-1">
-
                           <h3 className="truncate text-sm font-semibold text-[#17243D]">
                             {note.title}
                           </h3>
@@ -376,51 +330,35 @@ function NotesPage() {
                           </p>
 
                           <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-
                             <Clock size={12} />
 
                             {formatDate(note.updatedAt)}
-
                           </div>
 
                           <p className="mt-2 text-xs">
                             {note.syncStatus === "synced" ? (
-                              <span className="text-green-600">
-                                Synced
-                              </span>
+                              <span className="text-green-600">Synced</span>
                             ) : note.syncStatus === "conflict" ? (
-                              <span className="text-red-600">
-                                Conflict
-                              </span>
+                              <span className="text-red-600">Conflict</span>
                             ) : (
                               <span className="text-orange-600">
                                 Pending sync
                               </span>
                             )}
                           </p>
-
                         </div>
-
                       </div>
-
                     </button>
-
                   ))
-
                 )}
-
               </div>
-
             </section>
 
             {/* NOTE EDITOR */}
 
             <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm lg:col-span-2">
-
               {!selectedNote && !isCreating ? (
-
                 <div className="flex h-full min-h-[500px] flex-col items-center justify-center text-center">
-
                   <div className="rounded-2xl bg-[#F47768]/10 p-5 text-[#F47768]">
                     <FileText size={35} />
                   </div>
@@ -430,7 +368,8 @@ function NotesPage() {
                   </h2>
 
                   <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
-                    Select a note from the left or create a new note to start writing.
+                    Select a note from the left or create a new note to start
+                    writing.
                   </p>
 
                   <button
@@ -440,17 +379,12 @@ function NotesPage() {
                     <Plus size={18} />
                     Create a Note
                   </button>
-
                 </div>
-
               ) : (
-
                 <div className="flex h-full flex-col">
-
                   {/* EDITOR HEADER */}
 
                   <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#17243D]/10 pb-5">
-
                     <div>
                       <h2 className="font-bold text-[#17243D]">
                         {isCreating ? "Create New Note" : "Edit Note"}
@@ -462,7 +396,6 @@ function NotesPage() {
                     </div>
 
                     <div className="flex items-center gap-2">
-
                       {selectedNoteId && (
                         <button
                           onClick={handleDelete}
@@ -482,9 +415,7 @@ function NotesPage() {
 
                         {isSaving ? "Saving..." : "Save Note"}
                       </button>
-
                     </div>
-
                   </div>
 
                   {/* TITLE */}
@@ -518,31 +449,20 @@ function NotesPage() {
                   {/* FOOTER */}
 
                   <div className="mt-5 flex items-center justify-between border-t border-[#17243D]/10 pt-4 text-xs text-gray-400">
-
-                    <span>
-                      {content.length} characters
-                    </span>
+                    <span>{content.length} characters</span>
 
                     <span>
                       {selectedNote
                         ? `Last updated: ${formatDate(selectedNote.updatedAt)}`
                         : "New note"}
                     </span>
-
                   </div>
-
                 </div>
-
               )}
-
             </section>
-
           </div>
-
         </div>
-
       </main>
-
     </div>
   );
 }

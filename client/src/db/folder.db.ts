@@ -27,6 +27,21 @@ const addToSyncQueue = async (
 };
 
 // =====================================
+// GET QUEUED CHANGES FOR A FOLDER
+// =====================================
+
+const getFolderChanges = async (
+  folderId: string,
+): Promise<LocalSyncChange[]> => {
+  const changes = await db.syncQueue
+    .where("[entityType+entityId]")
+    .equals(["folder", folderId])
+    .toArray();
+
+  return changes;
+};
+
+// =====================================
 // CREATE FOLDER LOCALLY
 // =====================================
 
@@ -44,6 +59,7 @@ export const createLocalFolder = async (
     id: generateId(),
     name: name.trim(),
     color,
+    version: 1,
     createdAt: now,
     updatedAt: now,
     syncStatus: "pending",
@@ -96,50 +112,94 @@ export const updateLocalFolder = async (
   id: string,
   updates: Partial<Pick<LocalFolder, "name" | "color">>,
 ): Promise<LocalFolder> => {
-  const existingFolder = await db.folders.get(id);
+  return db.transaction("rw", db.folders, db.syncQueue, async () => {
+    const existingFolder = await db.folders.get(id);
 
-  if (!existingFolder) {
-    throw new Error("Folder not found");
-  }
+    if (!existingFolder) {
+      throw new Error("Folder not found");
+    }
 
-  if (updates.name !== undefined && !updates.name.trim()) {
-    throw new Error("Folder name is required");
-  }
+    if (updates.name !== undefined && !updates.name.trim()) {
+      throw new Error("Folder name is required");
+    }
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  const updatedFolder: LocalFolder = {
-    ...existingFolder,
-    ...updates,
-    name:
-      updates.name !== undefined
-        ? updates.name.trim()
-        : existingFolder.name,
-    updatedAt: now,
-    syncStatus: "pending",
-  };
-
-  const change: Omit<LocalSyncChange, "id"> = {
-    entityType: "folder",
-    entityId: id,
-    operation: "update",
-    clientMutationId: crypto.randomUUID(),
-    data: {
+    const updatedFolder: LocalFolder = {
+      ...existingFolder,
       ...updates,
+      name:
+        updates.name !== undefined
+          ? updates.name.trim()
+          : existingFolder.name,
+      updatedAt: now,
+      syncStatus: "pending",
+    };
+
+    const changes = await getFolderChanges(id);
+
+    const pendingCreate = changes.find(
+      (change) =>
+        change.operation === "create" &&
+        change.status !== "processing",
+    );
+
+    const pendingUpdate = changes.find(
+      (change) =>
+        change.operation === "update" &&
+        change.status !== "processing",
+    );
+
+    const updateData = {
       ...(updates.name !== undefined
         ? { name: updates.name.trim() }
         : {}),
-    },
-    createdAt: now,
-    status: "pending",
-  };
+      ...(updates.color !== undefined
+        ? { color: updates.color }
+        : {}),
+    };
 
-  await db.transaction("rw", db.folders, db.syncQueue, async () => {
+    // If creation has not started syncing, merge edits into creation.
+    if (pendingCreate && pendingCreate.id !== undefined) {
+      await db.syncQueue.update(pendingCreate.id, {
+        data: {
+          ...(pendingCreate.data ?? {}),
+          ...updateData,
+        },
+        status: "pending",
+      });
+    } else if (
+      pendingUpdate &&
+      pendingUpdate.id !== undefined
+    ) {
+      // Merge into an existing pending update.
+      await db.syncQueue.update(pendingUpdate.id, {
+        data: {
+          ...(pendingUpdate.data ?? {}),
+          ...updateData,
+        },
+        status: "pending",
+      });
+    } else {
+      // Create a new version-checked update.
+      const change: Omit<LocalSyncChange, "id"> = {
+        entityType: "folder",
+        entityId: id,
+        operation: "update",
+        clientMutationId: crypto.randomUUID(),
+        expectedVersion: existingFolder.version,
+        data: updateData,
+        createdAt: now,
+        status: "pending",
+      };
+
+      await addToSyncQueue(change);
+    }
+
     await db.folders.put(updatedFolder);
-    await addToSyncQueue(change);
-  });
 
-  return updatedFolder;
+    return updatedFolder;
+  });
 };
 
 // =====================================
@@ -149,26 +209,64 @@ export const updateLocalFolder = async (
 export const deleteLocalFolder = async (
   id: string,
 ): Promise<void> => {
-  const existingFolder = await db.folders.get(id);
-
-  if (!existingFolder) {
-    throw new Error("Folder not found");
-  }
-
-  const now = new Date().toISOString();
-
-  const change: Omit<LocalSyncChange, "id"> = {
-    entityType: "folder",
-    entityId: id,
-    operation: "delete",
-    clientMutationId: crypto.randomUUID(),
-    data: undefined,
-    createdAt: now,
-    status: "pending",
-  };
-
   await db.transaction("rw", db.folders, db.syncQueue, async () => {
-    await db.folders.delete(id);
+    const existingFolder = await db.folders.get(id);
+
+    if (!existingFolder) {
+      throw new Error("Folder not found");
+    }
+
+    const changes = await getFolderChanges(id);
+
+    const pendingCreate = changes.find(
+      (change) =>
+        change.operation === "create" &&
+        change.status !== "processing",
+    );
+
+    // If creation has not started syncing, cancel it entirely.
+    if (pendingCreate) {
+      const removableChanges = changes
+        .filter((change) => change.status !== "processing")
+        .map((change) => change.id)
+        .filter((changeId): changeId is number => changeId !== undefined);
+
+      if (removableChanges.length > 0) {
+        await db.syncQueue.bulkDelete(removableChanges);
+      }
+
+      await db.folders.delete(id);
+      return;
+    }
+
+    // Remove pending updates because deletion replaces them.
+    const pendingChanges = changes
+      .filter(
+        (change) =>
+          change.status !== "processing" &&
+          change.operation !== "create",
+      )
+      .map((change) => change.id)
+      .filter((changeId): changeId is number => changeId !== undefined);
+
+    if (pendingChanges.length > 0) {
+      await db.syncQueue.bulkDelete(pendingChanges);
+    }
+
+    const now = new Date().toISOString();
+
+    const change: Omit<LocalSyncChange, "id"> = {
+      entityType: "folder",
+      entityId: id,
+      operation: "delete",
+      clientMutationId: crypto.randomUUID(),
+      expectedVersion: existingFolder.version,
+      data: undefined,
+      createdAt: now,
+      status: "pending",
+    };
+
     await addToSyncQueue(change);
+    await db.folders.delete(id);
   });
 };

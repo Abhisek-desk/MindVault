@@ -22,9 +22,31 @@ export const getLocalConflicts = async (): Promise<LocalConflict[]> => {
 // =====================================
 
 export const getLocalConflictById = async (
-  id: string
+  id: string,
 ): Promise<LocalConflict | undefined> => {
   return db.conflicts.get(id);
+};
+
+// =====================================
+// GET SERVER VERSION
+// =====================================
+
+const getServerVersion = (
+  serverData: Record<string, unknown> | null,
+): number => {
+  const version = serverData?.version;
+
+  if (
+    typeof version !== "number" ||
+    !Number.isInteger(version) ||
+    version < 1
+  ) {
+    throw new Error(
+      "Valid server version is missing from the conflict.",
+    );
+  }
+
+  return version;
 };
 
 // =====================================
@@ -35,13 +57,17 @@ const createSyncChange = (
   entityType: "note" | "folder",
   entityId: string,
   operation: "create" | "update" | "delete",
-  data?: Record<string, unknown>
+  data?: Record<string, unknown>,
+  expectedVersion?: number,
 ): Omit<LocalSyncChange, "id"> => {
   return {
     entityType,
     entityId,
     operation,
     clientMutationId: crypto.randomUUID(),
+    ...(expectedVersion !== undefined
+      ? { expectedVersion }
+      : {}),
     ...(data !== undefined ? { data } : {}),
     createdAt: new Date().toISOString(),
     status: "pending",
@@ -53,7 +79,7 @@ const createSyncChange = (
 // =====================================
 
 export const keepLocalVersion = async (
-  conflictId: string
+  conflictId: string,
 ): Promise<void> => {
   await db.transaction(
     "rw",
@@ -68,10 +94,15 @@ export const keepLocalVersion = async (
         throw new Error("Conflict not found");
       }
 
-      const { entityType, entityId, localData, operation: serverOperation } =
-        conflict;
+      const {
+        entityType,
+        entityId,
+        localData,
+        operation: serverOperation,
+        serverData,
+      } = conflict;
 
-      // Remove previous queued operations for this entity.
+      // Remove previous queued operations.
       await db.syncQueue
         .where("[entityType+entityId]")
         .equals([entityType, entityId])
@@ -85,30 +116,63 @@ export const keepLocalVersion = async (
         if (localData) {
           const note = localData as unknown as LocalNote;
 
-          await db.notes.put({
-            ...note,
-            syncStatus: "pending",
-          });
+          if (serverOperation === "delete") {
+            const recreatedNote: LocalNote = {
+              ...note,
+              version: 1,
+              syncStatus: "pending",
+            };
 
-          // If the server deleted the note, recreate it.
-          // Otherwise, update the existing server note.
-          const operation =
-            serverOperation === "delete" ? "create" : "update";
+            await db.notes.put(recreatedNote);
 
-          await db.syncQueue.add(
-            createSyncChange("note", entityId, operation, {
-              title: note.title,
-              content: note.content,
-              folderId: note.folderId,
-            })
-          );
+            await db.syncQueue.add(
+              createSyncChange("note", entityId, "create", {
+                title: note.title,
+                content: note.content,
+                folderId: note.folderId,
+                version: 1,
+              }),
+            );
+          } else {
+            const serverVersion = getServerVersion(serverData);
+
+            await db.notes.put({
+              ...note,
+              version: serverVersion,
+              syncStatus: "pending",
+            });
+
+            await db.syncQueue.add(
+              createSyncChange(
+                "note",
+                entityId,
+                "update",
+                {
+                  title: note.title,
+                  content: note.content,
+                  folderId: note.folderId,
+                },
+                serverVersion,
+              ),
+            );
+          }
         } else {
-          // The local version represents a deletion.
+          // Local version represents a deletion.
           await db.notes.delete(entityId);
 
-          await db.syncQueue.add(
-            createSyncChange("note", entityId, "delete")
-          );
+          if (serverOperation !== "delete") {
+            const serverVersion = getServerVersion(serverData);
+
+            await db.syncQueue.add(
+              createSyncChange(
+                "note",
+                entityId,
+                "delete",
+                undefined,
+                serverVersion,
+              ),
+            );
+          }
         }
       }
 
@@ -120,32 +184,66 @@ export const keepLocalVersion = async (
         if (localData) {
           const folder = localData as unknown as LocalFolder;
 
-          await db.folders.put({
-            ...folder,
-            syncStatus: "pending",
-          });
+          if (serverOperation === "delete") {
+            const recreatedFolder: LocalFolder = {
+              ...folder,
+              version: 1,
+              syncStatus: "pending",
+            };
 
-          const operation =
-            serverOperation === "delete" ? "create" : "update";
+            await db.folders.put(recreatedFolder);
 
-          await db.syncQueue.add(
-            createSyncChange("folder", entityId, operation, {
-              name: folder.name,
-              color: folder.color,
-            })
-          );
+            await db.syncQueue.add(
+              createSyncChange("folder", entityId, "create", {
+                name: folder.name,
+                color: folder.color,
+                version: 1,
+              }),
+            );
+          } else {
+            const serverVersion = getServerVersion(serverData);
+
+            await db.folders.put({
+              ...folder,
+              version: serverVersion,
+              syncStatus: "pending",
+            });
+
+            await db.syncQueue.add(
+              createSyncChange(
+                "folder",
+                entityId,
+                "update",
+                {
+                  name: folder.name,
+                  color: folder.color,
+                },
+                serverVersion,
+              ),
+            );
+          }
         } else {
           await db.folders.delete(entityId);
 
-          await db.syncQueue.add(
-            createSyncChange("folder", entityId, "delete")
-          );
+          if (serverOperation !== "delete") {
+            const serverVersion = getServerVersion(serverData);
+
+            await db.syncQueue.add(
+              createSyncChange(
+                "folder",
+                entityId,
+                "delete",
+                undefined,
+                serverVersion,
+              ),
+            );
+          }
         }
       }
 
       // Remove resolved conflict.
       await db.conflicts.delete(conflictId);
-    }
+    },
   );
 };
 
@@ -154,7 +252,7 @@ export const keepLocalVersion = async (
 // =====================================
 
 export const useServerVersion = async (
-  conflictId: string
+  conflictId: string,
 ): Promise<void> => {
   await db.transaction(
     "rw",
@@ -176,7 +274,7 @@ export const useServerVersion = async (
         operation,
       } = conflict;
 
-      // Remove all pending local operations.
+      // Remove all queued local operations.
       await db.syncQueue
         .where("[entityType+entityId]")
         .equals([entityType, entityId])
@@ -191,13 +289,16 @@ export const useServerVersion = async (
           await db.notes.delete(entityId);
         } else {
           if (!serverData) {
-            throw new Error("Server note data is missing");
+            throw new Error(
+              "Server note data is missing",
+            );
           }
 
           const existingNote = await db.notes.get(entityId);
 
           const note: LocalNote = {
             id: entityId,
+
             title:
               typeof serverData.title === "string"
                 ? serverData.title
@@ -215,9 +316,13 @@ export const useServerVersion = async (
                   ? serverData.folderId
                   : null,
 
+            version: getServerVersion(serverData),
+
             createdAt:
-              existingNote?.createdAt ??
-              conflict.detectedAt,
+              typeof serverData.createdAt === "string"
+                ? serverData.createdAt
+                : existingNote?.createdAt ??
+                  conflict.detectedAt,
 
             updatedAt:
               typeof serverData.updatedAt === "string"
@@ -240,7 +345,9 @@ export const useServerVersion = async (
           await db.folders.delete(entityId);
         } else {
           if (!serverData) {
-            throw new Error("Server folder data is missing");
+            throw new Error(
+              "Server folder data is missing",
+            );
           }
 
           const existingFolder = await db.folders.get(entityId);
@@ -258,9 +365,13 @@ export const useServerVersion = async (
                 ? serverData.color
                 : "#F47768",
 
+            version: getServerVersion(serverData),
+
             createdAt:
-              existingFolder?.createdAt ??
-              conflict.detectedAt,
+              typeof serverData.createdAt === "string"
+                ? serverData.createdAt
+                : existingFolder?.createdAt ??
+                  conflict.detectedAt,
 
             updatedAt:
               typeof serverData.updatedAt === "string"
@@ -276,6 +387,6 @@ export const useServerVersion = async (
 
       // Remove resolved conflict.
       await db.conflicts.delete(conflictId);
-    }
+    },
   );
 };

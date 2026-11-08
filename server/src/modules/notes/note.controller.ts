@@ -106,6 +106,7 @@ export const createNote = async (
             title: note.title,
             content: note.content,
             folderId: note.folderId?.toString() ?? null,
+            version: note.version,
             createdAt: note.createdAt.toISOString(),
             updatedAt: note.updatedAt.toISOString(),
           },
@@ -202,7 +203,7 @@ export const updateNote = async (
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const { title, content, folderId } = req.body;
+    const { title, content, folderId, expectedVersion } = req.body;
 
     if (!userId) {
       res.status(401).json({
@@ -316,13 +317,10 @@ export const updateNote = async (
 
       try {
         updates.embedding = await generateEmbedding(
-          `${finalTitle}\n${finalContent}`
+          `${finalTitle}\n${finalContent}`,
         );
       } catch (error) {
-        console.error(
-          "Updated note embedding generation failed:",
-          error
-        );
+        console.error("Updated note embedding generation failed:", error);
 
         updates.embedding = [];
       }
@@ -335,13 +333,17 @@ export const updateNote = async (
         {
           _id: id,
           userId,
+          version: expectedVersion,
         },
-        updates,
+        {
+          $set: updates,
+          $inc: { version: 1 },
+        },
         {
           new: true,
           runValidators: true,
           session,
-        }
+        },
       );
 
       if (!updatedNote) {
@@ -360,9 +362,9 @@ export const updateNote = async (
             folderId: updatedNote.folderId?.toString() ?? null,
             createdAt: updatedNote.createdAt.toISOString(),
             updatedAt: updatedNote.updatedAt.toISOString(),
-          }
+          },
         },
-        session
+        session,
       );
     });
 
@@ -419,7 +421,7 @@ export const deleteNote = async (
           _id: id,
           userId,
         },
-        { session }
+        { session },
       );
 
       if (!note) {
@@ -435,9 +437,9 @@ export const deleteNote = async (
           data: {
             title: note.title,
             deletedAt: new Date().toISOString(),
-          }
+          },
         },
-        session
+        session,
       );
     });
 
@@ -445,7 +447,6 @@ export const deleteNote = async (
       success: true,
       message: "Note deleted successfully",
     });
-
   } catch (error) {
     if (error instanceof Error && error.message === "NOTE_NOT_FOUND") {
       res.status(404).json({
@@ -461,7 +462,6 @@ export const deleteNote = async (
       success: false,
       message: "Failed to delete note",
     });
-
   } finally {
     await session.endSession();
   }

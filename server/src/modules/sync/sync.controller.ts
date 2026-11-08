@@ -78,6 +78,10 @@ export const pushSyncChanges = async (
     let duplicates = 0;
 
     await session.withTransaction(async () => {
+      // Reset counters because MongoDB may retry this callback.
+      processed = 0;
+      duplicates = 0;
+
       for (const item of preparedChanges) {
         const { change, embedding } = item;
 
@@ -580,24 +584,78 @@ export const pushSyncChanges = async (
 
     const errorMessage = error instanceof Error ? error.message : "";
 
-    const knownErrors: Record<string, string> = {
-      NOTE_TITLE_REQUIRED: "Note title is required",
-      NOTE_UPDATE_DATA_REQUIRED: "Note update data is required",
-      NOTE_NOT_FOUND: "Note not found",
-      NOTE_ALREADY_EXISTS: "A note with this ID already exists",
-      NOTE_EXPECTED_VERSION_REQUIRED: "Expected note version is required",
-      NOTE_VERSION_CONFLICT:
-        "This note has changed on the server. Synchronize before retrying",
+    const knownErrors: Record<string, { message: string; status: number }> = {
+      NOTE_TITLE_REQUIRED: {
+        message: "Note title is required",
+        status: 400,
+      },
+      NOTE_UPDATE_DATA_REQUIRED: {
+        message: "Note update data is required",
+        status: 400,
+      },
+      NOTE_NOT_FOUND: {
+        message: "Note not found",
+        status: 404,
+      },
+      NOTE_ALREADY_EXISTS: {
+        message: "A note with this ID already exists",
+        status: 409,
+      },
+      NOTE_EXPECTED_VERSION_REQUIRED: {
+        message: "Expected note version is required",
+        status: 400,
+      },
+      NOTE_VERSION_CONFLICT: {
+        message:
+          "This note has changed on the server. Synchronize before retrying",
+        status: 409,
+      },
 
-      FOLDER_NOT_FOUND: "Folder not found",
-      FOLDER_NAME_REQUIRED: "Folder name is required",
-      FOLDER_UPDATE_DATA_REQUIRED: "Folder update data is required",
-      FOLDER_ALREADY_EXISTS: "A folder with this ID already exists",
-      FOLDER_NOT_EMPTY: "Delete or move the notes inside this folder first",
-      FOLDER_EXPECTED_VERSION_REQUIRED: "Expected folder version is required",
-      FOLDER_VERSION_CONFLICT:
-        "This folder has changed on the server. Synchronize before retrying",
+      FOLDER_NOT_FOUND: {
+        message: "Folder not found",
+        status: 404,
+      },
+      NOTE_FOLDER_NOT_FOUND: {
+        message: "The note's existing folder could not be found",
+        status: 409,
+      },
+      FOLDER_NAME_REQUIRED: {
+        message: "Folder name is required",
+        status: 400,
+      },
+      FOLDER_UPDATE_DATA_REQUIRED: {
+        message: "Folder update data is required",
+        status: 400,
+      },
+      FOLDER_ALREADY_EXISTS: {
+        message: "A folder with this ID already exists",
+        status: 409,
+      },
+      FOLDER_NOT_EMPTY: {
+        message: "Delete or move the notes inside this folder first",
+        status: 409,
+      },
+      FOLDER_EXPECTED_VERSION_REQUIRED: {
+        message: "Expected folder version is required",
+        status: 400,
+      },
+      FOLDER_VERSION_CONFLICT: {
+        message:
+          "This folder has changed on the server. Synchronize before retrying",
+        status: 409,
+      },
     };
+
+    const knownError = knownErrors[errorMessage];
+
+    if (knownError) {
+      res.status(knownError.status).json({
+        success: false,
+        message: knownError.message,
+        code: errorMessage,
+      });
+      return;
+    }
 
     if (knownErrors[errorMessage]) {
       res.status(409).json({

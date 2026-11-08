@@ -1,20 +1,87 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
+import {
+  createBrowserRouter,
+  Navigate,
+} from "react-router-dom";
 
 import NotFound from "../components/common/NotFound";
-
-import LoginPage from "../features/auth/pages/LoginPage";
-import RegisterPage from "../features/auth/pages/RegisterPage";
 
 import ProtectedRoute from "../features/auth/routes/ProtectedRoute";
 import PublicRoute from "../features/auth/routes/PublicRoute";
 
-import DashboardPage from "../features/dashboard/pages/DashboardPage";
-import NotesPage from "../features/notes/pages/NotesPage";
-import FoldersPage from "../features/library/pages/FoldersPage";
-import LibraryPage from "../features/library/pages/LibraryPage";
-import PackReaderPage from "../features/library/pages/PackReaderPage";
-import SearchPage from "../features/search/pages/SearchPage";
-import ConflictsPage from "../features/sync/pages/ConflictsPage";
+// =====================================
+// LAZY-LOADED PAGES
+// =====================================
+
+const LoginPage = lazy(
+  () => import("../features/auth/pages/LoginPage")
+);
+
+const RegisterPage = lazy(
+  () => import("../features/auth/pages/RegisterPage")
+);
+
+const DashboardPage = lazy(
+  () => import("../features/dashboard/pages/DashboardPage")
+);
+
+const NotesPage = lazy(
+  () => import("../features/notes/pages/NotesPage")
+);
+
+const FoldersPage = lazy(
+  () => import("../features/library/pages/FoldersPage")
+);
+
+const LibraryPage = lazy(
+  () => import("../features/library/pages/LibraryPage")
+);
+
+const PackReaderPage = lazy(
+  () => import("../features/library/pages/PackReaderPage")
+);
+
+const SearchPage = lazy(
+  () => import("../features/search/pages/SearchPage")
+);
+
+const ConflictsPage = lazy(
+  () => import("../features/sync/pages/ConflictsPage")
+);
+
+// =====================================
+// LOADING FALLBACK
+// =====================================
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#F8F1E5]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#17243D]/20 border-t-[#F47768]" />
+
+        <p className="text-sm font-medium text-[#17243D]">
+          Loading Mind Vault...
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// =====================================
+// ROUTE WRAPPER
+// =====================================
+
+function loadPage(element: React.ReactNode) {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      {element}
+    </Suspense>
+  );
+}
+
+// =====================================
+// APPLICATION ROUTER
+// =====================================
 
 const router = createBrowserRouter([
   {
@@ -22,11 +89,11 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/login",
-        element: <LoginPage />,
+        element: loadPage(<LoginPage />),
       },
       {
         path: "/register",
-        element: <RegisterPage />,
+        element: loadPage(<RegisterPage />),
       },
     ],
   },
@@ -36,31 +103,31 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/dashboard",
-        element: <DashboardPage />,
+        element: loadPage(<DashboardPage />),
       },
       {
         path: "/notes",
-        element: <NotesPage />,
+        element: loadPage(<NotesPage />),
       },
       {
         path: "/folders",
-        element: <FoldersPage />,
+        element: loadPage(<FoldersPage />),
       },
       {
         path: "/library",
-        element: <LibraryPage />,
+        element: loadPage(<LibraryPage />),
       },
       {
         path: "/library/read/:packId",
-        element: <PackReaderPage />,
+        element: loadPage(<PackReaderPage />),
       },
       {
         path: "/search",
-        element: <SearchPage />,
+        element: loadPage(<SearchPage />),
       },
       {
         path: "/conflicts",
-        element: <ConflictsPage />,
+        element: loadPage(<ConflictsPage />),
       },
     ],
   },

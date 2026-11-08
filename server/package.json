@@ -11,7 +11,9 @@
     "test:watch": "vitest",
     "seed:packs": "tsx src/scripts/seed-knowledge-packs.ts",
     "backfill:embeddings": "tsx src/scripts/backfill-note-embeddings.ts",
-    "backfill:versions": "tsx src/scripts/backfill-versions.ts"
+    "backfill:versions": "tsx src/scripts/backfill-versions.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",

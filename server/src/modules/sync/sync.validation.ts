@@ -49,14 +49,33 @@ const folderSyncSchema = z.object({
     .optional(),
 });
 
-export const pushSyncSchema = z.object({
-  changes: z
-    .array(
-      z.discriminatedUnion("entityType", [noteSyncSchema, folderSyncSchema]),
-    )
-    .min(1)
-    .max(50),
-});
+export const pushSyncSchema = z
+  .object({
+    changes: z
+      .array(
+        z.discriminatedUnion("entityType", [
+          noteSyncSchema,
+          folderSyncSchema,
+        ]),
+      )
+      .min(1)
+      .max(50),
+  })
+  .superRefine((value, context) => {
+    value.changes.forEach((change, index) => {
+      if (
+        (change.operation === "update" ||
+          change.operation === "delete") &&
+        change.expectedVersion === undefined
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["changes", index, "expectedVersion"],
+          message: `Expected version is required for ${change.operation} operations`,
+        });
+      }
+    });
+  });
 
 export const pullSyncQuerySchema = z.object({
   cursor: z

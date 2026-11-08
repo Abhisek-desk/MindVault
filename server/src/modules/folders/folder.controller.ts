@@ -60,7 +60,8 @@ export const createFolder = async (
         [{
           userId,
           name: name.trim(),
-          color: color || "#F47768"
+          color: color || "#F47768",
+          version: 1
         }],
         { session }
       );
@@ -74,6 +75,7 @@ export const createFolder = async (
           data: {
             name: folder.name,
             color: folder.color,
+            version: folder.version,
             createdAt: folder.createdAt.toISOString(),
             updatedAt: folder.updatedAt.toISOString()
           }
@@ -170,7 +172,7 @@ export const updateFolder = async (
   try {
     const userId = req.userId;
     const { id } = req.params;
-    const { name, color } = req.body;
+    const { name, color, expectedVersion } = req.body;
 
     if (!userId) {
       res.status(401).json({
@@ -184,6 +186,18 @@ export const updateFolder = async (
       res.status(400).json({
         success: false,
         message: "Invalid folder ID"
+      });
+      return;
+    }
+
+    // Validate expected version.
+    if (
+      !Number.isInteger(expectedVersion) ||
+      expectedVersion < 1
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid expectedVersion is required"
       });
       return;
     }
@@ -235,12 +249,19 @@ export const updateFolder = async (
     let updatedFolder: InstanceType<typeof Folder> | null = null;
 
     await session.withTransaction(async () => {
+      // Atomic optimistic concurrency check.
       const folder = await Folder.findOneAndUpdate(
         {
           _id: id,
-          userId
+          userId,
+          version: expectedVersion
         },
-        updates,
+        {
+          $set: updates,
+          $inc: {
+            version: 1
+          }
+        },
         {
           new: true,
           runValidators: true,
@@ -249,7 +270,16 @@ export const updateFolder = async (
       );
 
       if (!folder) {
-        throw new Error("FOLDER_NOT_FOUND");
+        const currentFolder = await Folder.findOne({
+          _id: id,
+          userId
+        }).session(session);
+
+        if (!currentFolder) {
+          throw new Error("FOLDER_NOT_FOUND");
+        }
+
+        throw new Error("FOLDER_VERSION_CONFLICT");
       }
 
       await recordSyncChange(
@@ -261,6 +291,7 @@ export const updateFolder = async (
           data: {
             name: folder.name,
             color: folder.color,
+            version: folder.version,
             createdAt: folder.createdAt.toISOString(),
             updatedAt: folder.updatedAt.toISOString()
           }
@@ -285,6 +316,15 @@ export const updateFolder = async (
       res.status(404).json({
         success: false,
         message: "Folder not found"
+      });
+      return;
+    }
+
+    if (errorMessage === "FOLDER_VERSION_CONFLICT") {
+      res.status(409).json({
+        success: false,
+        message:
+          "Folder was modified by another device. Please sync and resolve the conflict."
       });
       return;
     }
@@ -328,6 +368,7 @@ export const deleteFolder = async (
   try {
     const userId = req.userId;
     const { id } = req.params;
+    const { expectedVersion } = req.body ?? {};
 
     if (!userId) {
       res.status(401).json({
@@ -345,7 +386,20 @@ export const deleteFolder = async (
       return;
     }
 
+    // Validate expected version.
+    if (
+      !Number.isInteger(expectedVersion) ||
+      expectedVersion < 1
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "A valid expectedVersion is required"
+      });
+      return;
+    }
+
     await session.withTransaction(async () => {
+      // Check folder existence and version.
       const folder = await Folder.findOne({
         _id: id,
         userId
@@ -355,6 +409,11 @@ export const deleteFolder = async (
         throw new Error("FOLDER_NOT_FOUND");
       }
 
+      if (folder.version !== expectedVersion) {
+        throw new Error("FOLDER_VERSION_CONFLICT");
+      }
+
+      // Prevent deleting folders containing notes.
       const hasNotes = await Note.exists({
         userId,
         folderId: id
@@ -364,22 +423,30 @@ export const deleteFolder = async (
         throw new Error("FOLDER_NOT_EMPTY");
       }
 
-      await Folder.deleteOne(
+      // Delete only if the version still matches.
+      const deletedFolder = await Folder.findOneAndDelete(
         {
           _id: id,
-          userId
+          userId,
+          version: expectedVersion
         },
         { session }
       );
 
+      if (!deletedFolder) {
+        throw new Error("FOLDER_VERSION_CONFLICT");
+      }
+
+      // Record version-aware deletion tombstone.
       await recordSyncChange(
         {
           userId,
           entityType: "folder",
-          entityId: folder._id.toString(),
+          entityId: deletedFolder._id.toString(),
           operation: "delete",
           data: {
-            name: folder.name,
+            name: deletedFolder.name,
+            version: deletedFolder.version,
             deletedAt: new Date().toISOString()
           }
         },
@@ -404,10 +471,20 @@ export const deleteFolder = async (
       return;
     }
 
+    if (errorMessage === "FOLDER_VERSION_CONFLICT") {
+      res.status(409).json({
+        success: false,
+        message:
+          "Folder was modified by another device. Please sync and resolve the conflict."
+      });
+      return;
+    }
+
     if (errorMessage === "FOLDER_NOT_EMPTY") {
       res.status(409).json({
         success: false,
-        message: "Move or remove the notes in this folder before deleting it"
+        message:
+          "Move or remove the notes in this folder before deleting it"
       });
       return;
     }

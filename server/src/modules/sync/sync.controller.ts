@@ -104,10 +104,21 @@ export const pushSyncChanges = async (
             }
 
             if (change.data.folderId) {
-              const folder = await Folder.findOne({
-                _id: change.data.folderId,
-                userId,
-              }).session(session);
+              const folder = await Folder.findOneAndUpdate(
+                {
+                  _id: change.data.folderId,
+                  userId,
+                },
+                {
+                  $inc: {
+                    membershipRevision: 1,
+                  },
+                },
+                {
+                  new: true,
+                  session,
+                },
+              );
 
               if (!folder) {
                 throw new Error("FOLDER_NOT_FOUND");
@@ -180,14 +191,50 @@ export const pushSyncChanges = async (
               throw new Error("NOTE_VERSION_CONFLICT");
             }
 
-            if (change.data.folderId) {
-              const folder = await Folder.findOne({
-                _id: change.data.folderId,
-                userId,
-              }).session(session);
+            // Protect folder membership when moving a note.
+            if (change.data.folderId !== undefined) {
+              const oldFolderId = existingNote.folderId?.toString() ?? null;
 
-              if (!folder) {
-                throw new Error("FOLDER_NOT_FOUND");
+              const newFolderId = change.data.folderId
+                ? change.data.folderId.toString()
+                : null;
+
+              // Only lock folders when membership actually changes.
+              if (oldFolderId !== newFolderId) {
+                const folderIds = [
+                  ...new Set(
+                    [oldFolderId, newFolderId].filter(
+                      (id): id is string => id !== null,
+                    ),
+                  ),
+                ].sort();
+
+                // Always acquire locks in sorted order to reduce deadlocks.
+                for (const folderId of folderIds) {
+                  const folder = await Folder.findOneAndUpdate(
+                    {
+                      _id: folderId,
+                      userId,
+                    },
+                    {
+                      $inc: {
+                        membershipRevision: 1,
+                      },
+                    },
+                    {
+                      new: true,
+                      session,
+                    },
+                  );
+
+                  if (!folder) {
+                    if (folderId === oldFolderId) {
+                      throw new Error("NOTE_FOLDER_NOT_FOUND");
+                    }
+
+                    throw new Error("FOLDER_NOT_FOUND");
+                  }
+                }
               }
             }
 
@@ -561,16 +608,42 @@ export const pushSyncChanges = async (
     }
 
     // MongoDB duplicate-key error, for example duplicate folder name.
+    // Handle MongoDB duplicate-key errors.
     if (
       typeof error === "object" &&
       error !== null &&
       "code" in error &&
       error.code === 11000
     ) {
+      const mongoError = error as {
+        keyPattern?: Record<string, unknown>;
+        keyValue?: Record<string, unknown>;
+      };
+
+      const keyPattern = mongoError.keyPattern ?? {};
+      const keyValue = mongoError.keyValue ?? {};
+
+      let message = "A duplicate record already exists";
+
+      if ("name" in keyPattern) {
+        message = "A folder with this name already exists";
+      } else if ("clientMutationId" in keyPattern) {
+        message = "This synchronization operation was already processed";
+      } else if ("_id" in keyPattern) {
+        message = "A record with this ID already exists";
+      }
+
+      console.error("Sync duplicate-key details:", {
+        keyPattern,
+        keyValue,
+      });
+
       res.status(409).json({
         success: false,
-        message: "A folder with this name already exists",
+        message,
+        code: "DUPLICATE_RECORD",
       });
+
       return;
     }
 

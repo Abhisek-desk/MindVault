@@ -53,19 +53,31 @@ export const pushSyncSchema = z
   .object({
     changes: z
       .array(
-        z.discriminatedUnion("entityType", [
-          noteSyncSchema,
-          folderSyncSchema,
-        ]),
+        z.discriminatedUnion("entityType", [noteSyncSchema, folderSyncSchema]),
       )
       .min(1)
       .max(50),
   })
   .superRefine((value, context) => {
+    const seenMutationIds = new Set<string>();
+
     value.changes.forEach((change, index) => {
+      // Prevent duplicate mutation IDs within the same batch.
+      const normalizedMutationId = change.clientMutationId.toLowerCase();
+
+      if (seenMutationIds.has(normalizedMutationId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["changes", index, "clientMutationId"],
+          message: "Duplicate clientMutationId in synchronization batch",
+        });
+      } else {
+        seenMutationIds.add(normalizedMutationId);
+      }
+
+      // Require expectedVersion for updates and deletions.
       if (
-        (change.operation === "update" ||
-          change.operation === "delete") &&
+        (change.operation === "update" || change.operation === "delete") &&
         change.expectedVersion === undefined
       ) {
         context.addIssue({

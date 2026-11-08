@@ -8,7 +8,14 @@ import { generateEmbedding } from "../ai/embedding.service";
 import { SyncChange } from "./sync.model";
 import { recordSyncChange } from "./sync.service";
 
-import { pushSyncSchema, pullSyncQuerySchema } from "./sync.validation";
+import {
+  pushSyncSchema,
+  pullSyncQuerySchema,
+} from "./sync.validation";
+
+// =====================================
+// PUSH SYNCHRONIZATION
+// =====================================
 
 export const pushSyncChanges = async (
   req: Request,
@@ -64,7 +71,10 @@ export const pushSyncChanges = async (
             embedding,
           };
         } catch (error) {
-          console.error("Sync embedding generation failed:", error);
+          console.error(
+            "Sync embedding generation failed:",
+            error,
+          );
 
           return {
             change,
@@ -85,7 +95,10 @@ export const pushSyncChanges = async (
       for (const item of preparedChanges) {
         const { change, embedding } = item;
 
-        // Prevent duplicate operations.
+        // =====================================
+        // IDEMPOTENCY CHECK
+        // =====================================
+
         const existingMutation = await SyncChange.findOne({
           userId,
           clientMutationId: change.clientMutationId,
@@ -101,12 +114,16 @@ export const pushSyncChanges = async (
         // =====================================
 
         if (change.entityType === "note") {
+          // -------------------------------------
           // CREATE NOTE
+          // -------------------------------------
+
           if (change.operation === "create") {
             if (!change.data?.title) {
               throw new Error("NOTE_TITLE_REQUIRED");
             }
 
+            // Lock folder membership before creating a note.
             if (change.data.folderId) {
               const folder = await Folder.findOneAndUpdate(
                 {
@@ -129,9 +146,9 @@ export const pushSyncChanges = async (
               }
             }
 
-            const existingNote = await Note.findById(change.entityId).session(
-              session,
-            );
+            const existingNote = await Note.findById(
+              change.entityId,
+            ).session(session);
 
             if (existingNote) {
               throw new Error("NOTE_ALREADY_EXISTS");
@@ -140,12 +157,16 @@ export const pushSyncChanges = async (
             const [note] = await Note.create(
               [
                 {
-                  _id: new mongoose.Types.ObjectId(change.entityId),
+                  _id: new mongoose.Types.ObjectId(
+                    change.entityId,
+                  ),
                   userId,
                   title: change.data.title,
                   content: change.data.content ?? "",
                   folderId: change.data.folderId
-                    ? new mongoose.Types.ObjectId(change.data.folderId)
+                    ? new mongoose.Types.ObjectId(
+                        change.data.folderId,
+                      )
                     : null,
                   version: 1,
                   ...(embedding ? { embedding } : {}),
@@ -164,7 +185,8 @@ export const pushSyncChanges = async (
                 data: {
                   title: note.title,
                   content: note.content,
-                  folderId: note.folderId?.toString() ?? null,
+                  folderId:
+                    note.folderId?.toString() ?? null,
                   version: note.version,
                 },
               },
@@ -172,14 +194,22 @@ export const pushSyncChanges = async (
             );
           }
 
+          // -------------------------------------
           // UPDATE NOTE
+          // -------------------------------------
+
           else if (change.operation === "update") {
-            if (!change.data || Object.keys(change.data).length === 0) {
+            if (
+              !change.data ||
+              Object.keys(change.data).length === 0
+            ) {
               throw new Error("NOTE_UPDATE_DATA_REQUIRED");
             }
 
             if (change.expectedVersion === undefined) {
-              throw new Error("NOTE_EXPECTED_VERSION_REQUIRED");
+              throw new Error(
+                "NOTE_EXPECTED_VERSION_REQUIRED",
+              );
             }
 
             const existingNote = await Note.findOne({
@@ -191,19 +221,21 @@ export const pushSyncChanges = async (
               throw new Error("NOTE_NOT_FOUND");
             }
 
-            if (existingNote.version !== change.expectedVersion) {
+            if (
+              existingNote.version !== change.expectedVersion
+            ) {
               throw new Error("NOTE_VERSION_CONFLICT");
             }
 
             // Protect folder membership when moving a note.
             if (change.data.folderId !== undefined) {
-              const oldFolderId = existingNote.folderId?.toString() ?? null;
+              const oldFolderId =
+                existingNote.folderId?.toString() ?? null;
 
               const newFolderId = change.data.folderId
                 ? change.data.folderId.toString()
                 : null;
 
-              // Only lock folders when membership actually changes.
               if (oldFolderId !== newFolderId) {
                 const folderIds = [
                   ...new Set(
@@ -213,27 +245,30 @@ export const pushSyncChanges = async (
                   ),
                 ].sort();
 
-                // Always acquire locks in sorted order to reduce deadlocks.
+                // Always acquire locks in sorted order.
                 for (const folderId of folderIds) {
-                  const folder = await Folder.findOneAndUpdate(
-                    {
-                      _id: folderId,
-                      userId,
-                    },
-                    {
-                      $inc: {
-                        membershipRevision: 1,
+                  const folder =
+                    await Folder.findOneAndUpdate(
+                      {
+                        _id: folderId,
+                        userId,
                       },
-                    },
-                    {
-                      new: true,
-                      session,
-                    },
-                  );
+                      {
+                        $inc: {
+                          membershipRevision: 1,
+                        },
+                      },
+                      {
+                        new: true,
+                        session,
+                      },
+                    );
 
                   if (!folder) {
                     if (folderId === oldFolderId) {
-                      throw new Error("NOTE_FOLDER_NOT_FOUND");
+                      throw new Error(
+                        "NOTE_FOLDER_NOT_FOUND",
+                      );
                     }
 
                     throw new Error("FOLDER_NOT_FOUND");
@@ -254,7 +289,9 @@ export const pushSyncChanges = async (
 
             if (change.data.folderId !== undefined) {
               updateFields.folderId = change.data.folderId
-                ? new mongoose.Types.ObjectId(change.data.folderId)
+                ? new mongoose.Types.ObjectId(
+                    change.data.folderId,
+                  )
                 : null;
             }
 
@@ -275,7 +312,9 @@ export const pushSyncChanges = async (
               },
               {
                 $set: updateFields,
-                $inc: { version: 1 },
+                $inc: {
+                  version: 1,
+                },
               },
               {
                 new: true,
@@ -298,7 +337,8 @@ export const pushSyncChanges = async (
                 data: {
                   title: note.title,
                   content: note.content,
-                  folderId: note.folderId?.toString() ?? null,
+                  folderId:
+                    note.folderId?.toString() ?? null,
                   version: note.version,
                 },
               },
@@ -306,83 +346,82 @@ export const pushSyncChanges = async (
             );
           }
 
+          // -------------------------------------
           // DELETE NOTE
-          // DELETE FOLDER
+          // -------------------------------------
+
           else if (change.operation === "delete") {
             if (change.expectedVersion === undefined) {
-              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
+              throw new Error(
+                "NOTE_EXPECTED_VERSION_REQUIRED",
+              );
             }
 
-            const existingFolder = await Folder.findOne({
+            const existingNote = await Note.findOne({
               _id: change.entityId,
               userId,
             }).session(session);
 
-            if (!existingFolder) {
-              throw new Error("FOLDER_NOT_FOUND");
+            if (!existingNote) {
+              throw new Error("NOTE_NOT_FOUND");
             }
 
-            if (existingFolder.version !== change.expectedVersion) {
-              throw new Error("FOLDER_VERSION_CONFLICT");
+            if (
+              existingNote.version !== change.expectedVersion
+            ) {
+              throw new Error("NOTE_VERSION_CONFLICT");
             }
 
-            // Acquire a write lock on the folder.
-            // Note creation and movement use the same membershipRevision.
-            const lockedFolder = await Folder.findOneAndUpdate(
+            // Protect folder membership during note deletion.
+            if (existingNote.folderId) {
+              const lockedFolder =
+                await Folder.findOneAndUpdate(
+                  {
+                    _id: existingNote.folderId,
+                    userId,
+                  },
+                  {
+                    $inc: {
+                      membershipRevision: 1,
+                    },
+                  },
+                  {
+                    new: true,
+                    session,
+                  },
+                );
+
+              if (!lockedFolder) {
+                throw new Error("NOTE_FOLDER_NOT_FOUND");
+              }
+            }
+
+            const note = await Note.findOneAndDelete(
               {
                 _id: change.entityId,
                 userId,
                 version: change.expectedVersion,
-              },
-              {
-                $inc: {
-                  membershipRevision: 1,
-                },
-              },
-              {
-                new: true,
-                session,
-              },
-            );
-
-            if (!lockedFolder) {
-              throw new Error("FOLDER_VERSION_CONFLICT");
-            }
-
-            // Check folder membership after acquiring the write lock.
-            const notesInsideFolder = await Note.exists({
-              userId,
-              folderId: lockedFolder._id,
-            }).session(session);
-
-            if (notesInsideFolder) {
-              throw new Error("FOLDER_NOT_EMPTY");
-            }
-
-            const folder = await Folder.findOneAndDelete(
-              {
-                _id: change.entityId,
-                userId,
-                version: change.expectedVersion,
-                membershipRevision: lockedFolder.membershipRevision,
               },
               { session },
             );
 
-            if (!folder) {
-              throw new Error("FOLDER_VERSION_CONFLICT");
+            if (!note) {
+              throw new Error("NOTE_VERSION_CONFLICT");
             }
 
             await recordSyncChange(
               {
                 userId,
-                entityType: "folder",
-                entityId: change.entityId,
+                entityType: "note",
+                entityId: note._id.toString(),
                 operation: "delete",
                 clientMutationId: change.clientMutationId,
                 data: {
-                  name: folder.name,
-                  version: folder.version,
+                  title: note.title,
+                  content: note.content,
+                  folderId:
+                    note.folderId?.toString() ?? null,
+                  version: note.version,
                   deletedAt: new Date().toISOString(),
                 },
               },
@@ -394,8 +433,12 @@ export const pushSyncChanges = async (
         // =====================================
         // FOLDER SYNCHRONIZATION
         // =====================================
+
         else if (change.entityType === "folder") {
+          // -------------------------------------
           // CREATE FOLDER
+          // -------------------------------------
+
           if (change.operation === "create") {
             if (!change.data?.name) {
               throw new Error("FOLDER_NAME_REQUIRED");
@@ -412,7 +455,9 @@ export const pushSyncChanges = async (
             const [folder] = await Folder.create(
               [
                 {
-                  _id: new mongoose.Types.ObjectId(change.entityId),
+                  _id: new mongoose.Types.ObjectId(
+                    change.entityId,
+                  ),
                   userId,
                   name: change.data.name,
                   color: change.data.color ?? "#F47768",
@@ -439,14 +484,24 @@ export const pushSyncChanges = async (
             );
           }
 
+          // -------------------------------------
           // UPDATE FOLDER
+          // -------------------------------------
+
           else if (change.operation === "update") {
-            if (!change.data || Object.keys(change.data).length === 0) {
-              throw new Error("FOLDER_UPDATE_DATA_REQUIRED");
+            if (
+              !change.data ||
+              Object.keys(change.data).length === 0
+            ) {
+              throw new Error(
+                "FOLDER_UPDATE_DATA_REQUIRED",
+              );
             }
 
             if (change.expectedVersion === undefined) {
-              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
+              throw new Error(
+                "FOLDER_EXPECTED_VERSION_REQUIRED",
+              );
             }
 
             const existingFolder = await Folder.findOne({
@@ -458,7 +513,9 @@ export const pushSyncChanges = async (
               throw new Error("FOLDER_NOT_FOUND");
             }
 
-            if (existingFolder.version !== change.expectedVersion) {
+            if (
+              existingFolder.version !== change.expectedVersion
+            ) {
               throw new Error("FOLDER_VERSION_CONFLICT");
             }
 
@@ -480,7 +537,9 @@ export const pushSyncChanges = async (
               },
               {
                 $set: updateFields,
-                $inc: { version: 1 },
+                $inc: {
+                  version: 1,
+                },
               },
               {
                 new: true,
@@ -510,10 +569,15 @@ export const pushSyncChanges = async (
             );
           }
 
+          // -------------------------------------
           // DELETE FOLDER
+          // -------------------------------------
+
           else if (change.operation === "delete") {
             if (change.expectedVersion === undefined) {
-              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
+              throw new Error(
+                "FOLDER_EXPECTED_VERSION_REQUIRED",
+              );
             }
 
             const existingFolder = await Folder.findOne({
@@ -525,13 +589,38 @@ export const pushSyncChanges = async (
               throw new Error("FOLDER_NOT_FOUND");
             }
 
-            if (existingFolder.version !== change.expectedVersion) {
+            if (
+              existingFolder.version !== change.expectedVersion
+            ) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            // Acquire the membership lock before checking notes.
+            const lockedFolder =
+              await Folder.findOneAndUpdate(
+                {
+                  _id: change.entityId,
+                  userId,
+                  version: change.expectedVersion,
+                },
+                {
+                  $inc: {
+                    membershipRevision: 1,
+                  },
+                },
+                {
+                  new: true,
+                  session,
+                },
+              );
+
+            if (!lockedFolder) {
               throw new Error("FOLDER_VERSION_CONFLICT");
             }
 
             const notesInsideFolder = await Note.exists({
               userId,
-              folderId: existingFolder._id,
+              folderId: lockedFolder._id,
             }).session(session);
 
             if (notesInsideFolder) {
@@ -543,6 +632,8 @@ export const pushSyncChanges = async (
                 _id: change.entityId,
                 userId,
                 version: change.expectedVersion,
+                membershipRevision:
+                  lockedFolder.membershipRevision,
               },
               { session },
             );
@@ -582,29 +673,42 @@ export const pushSyncChanges = async (
   } catch (error) {
     console.error("Push sync error:", error);
 
-    const errorMessage = error instanceof Error ? error.message : "";
+    const errorMessage =
+      error instanceof Error ? error.message : "";
 
-    const knownErrors: Record<string, { message: string; status: number }> = {
+    // =====================================
+    // KNOWN ERRORS
+    // =====================================
+
+    const knownErrors: Record<
+      string,
+      { message: string; status: number }
+    > = {
       NOTE_TITLE_REQUIRED: {
         message: "Note title is required",
         status: 400,
       },
+
       NOTE_UPDATE_DATA_REQUIRED: {
         message: "Note update data is required",
         status: 400,
       },
+
       NOTE_NOT_FOUND: {
         message: "Note not found",
         status: 404,
       },
+
       NOTE_ALREADY_EXISTS: {
         message: "A note with this ID already exists",
         status: 409,
       },
+
       NOTE_EXPECTED_VERSION_REQUIRED: {
         message: "Expected note version is required",
         status: 400,
       },
+
       NOTE_VERSION_CONFLICT: {
         message:
           "This note has changed on the server. Synchronize before retrying",
@@ -615,30 +719,39 @@ export const pushSyncChanges = async (
         message: "Folder not found",
         status: 404,
       },
+
       NOTE_FOLDER_NOT_FOUND: {
-        message: "The note's existing folder could not be found",
+        message:
+          "The note's existing folder could not be found",
         status: 409,
       },
+
       FOLDER_NAME_REQUIRED: {
         message: "Folder name is required",
         status: 400,
       },
+
       FOLDER_UPDATE_DATA_REQUIRED: {
         message: "Folder update data is required",
         status: 400,
       },
+
       FOLDER_ALREADY_EXISTS: {
         message: "A folder with this ID already exists",
         status: 409,
       },
+
       FOLDER_NOT_EMPTY: {
-        message: "Delete or move the notes inside this folder first",
+        message:
+          "Delete or move the notes inside this folder first",
         status: 409,
       },
+
       FOLDER_EXPECTED_VERSION_REQUIRED: {
         message: "Expected folder version is required",
         status: 400,
       },
+
       FOLDER_VERSION_CONFLICT: {
         message:
           "This folder has changed on the server. Synchronize before retrying",
@@ -654,19 +767,14 @@ export const pushSyncChanges = async (
         message: knownError.message,
         code: errorMessage,
       });
+
       return;
     }
 
-    if (knownErrors[errorMessage]) {
-      res.status(409).json({
-        success: false,
-        message: knownErrors[errorMessage],
-      });
-      return;
-    }
+    // =====================================
+    // MONGODB DUPLICATE KEY ERROR
+    // =====================================
 
-    // MongoDB duplicate-key error, for example duplicate folder name.
-    // Handle MongoDB duplicate-key errors.
     if (
       typeof error === "object" &&
       error !== null &&
@@ -686,7 +794,8 @@ export const pushSyncChanges = async (
       if ("name" in keyPattern) {
         message = "A folder with this name already exists";
       } else if ("clientMutationId" in keyPattern) {
-        message = "This synchronization operation was already processed";
+        message =
+          "This synchronization operation was already processed";
       } else if ("_id" in keyPattern) {
         message = "A record with this ID already exists";
       }
@@ -730,17 +839,22 @@ export const pullSyncChanges = async (
         success: false,
         message: "Authentication required",
       });
+
       return;
     }
 
-    const validation = pullSyncQuerySchema.safeParse(req.query);
+    const validation = pullSyncQuerySchema.safeParse(
+      req.query,
+    );
 
     if (!validation.success) {
       res.status(400).json({
         success: false,
-        message: "Invalid synchronization cursor or limit",
+        message:
+          "Invalid synchronization cursor or limit",
         errors: validation.error.flatten(),
       });
+
       return;
     }
 
@@ -763,7 +877,9 @@ export const pullSyncChanges = async (
 
     const hasMore = changes.length > limit;
 
-    const results = hasMore ? changes.slice(0, limit) : changes;
+    const results = hasMore
+      ? changes.slice(0, limit)
+      : changes;
 
     const nextCursor =
       results.length > 0

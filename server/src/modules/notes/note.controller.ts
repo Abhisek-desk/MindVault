@@ -49,7 +49,6 @@ export const createNote = async (
       return;
     }
 
-    // Check folder ownership.
     if (folderId !== undefined && folderId !== null) {
       if (!mongoose.isValidObjectId(folderId)) {
         res.status(400).json({
@@ -58,22 +57,8 @@ export const createNote = async (
         });
         return;
       }
-
-      const folder = await Folder.findOne({
-        _id: folderId,
-        userId,
-      });
-
-      if (!folder) {
-        res.status(404).json({
-          success: false,
-          message: "Folder not found",
-        });
-        return;
-      }
     }
 
-    // Generate note embedding.
     let embedding: number[] | undefined;
 
     try {
@@ -84,7 +69,32 @@ export const createNote = async (
       console.error("Note embedding generation failed:", error);
     }
 
+    let createdNote: InstanceType<typeof Note> | null = null;
+
     await session.withTransaction(async () => {
+      // Coordinate note creation with folder deletion.
+      if (folderId) {
+        const folder = await Folder.findOneAndUpdate(
+          {
+            _id: folderId,
+            userId,
+          },
+          {
+            $inc: {
+              membershipRevision: 1,
+            },
+          },
+          {
+            new: true,
+            session,
+          },
+        );
+
+        if (!folder) {
+          throw new Error("FOLDER_NOT_FOUND");
+        }
+      }
+
       const [note] = await Note.create(
         [
           {
@@ -117,13 +127,23 @@ export const createNote = async (
         session,
       );
 
-      res.status(201).json({
-        success: true,
-        message: "Note created successfully",
-        note,
-      });
+      createdNote = note;
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Note created successfully",
+      note: createdNote,
     });
   } catch (error) {
+    if (error instanceof Error && error.message === "FOLDER_NOT_FOUND") {
+      res.status(404).json({
+        success: false,
+        message: "Folder not found",
+      });
+      return;
+    }
+
     console.error("Create note error:", error);
 
     res.status(500).json({
@@ -235,7 +255,6 @@ export const updateNote = async (
       return;
     }
 
-    // Validate expected version.
     if (
       !Number.isInteger(expectedVersion) ||
       expectedVersion < 1
@@ -254,7 +273,6 @@ export const updateNote = async (
       embedding?: number[];
     } = {};
 
-    // Validate title.
     if (title !== undefined) {
       if (
         typeof title !== "string" ||
@@ -271,7 +289,6 @@ export const updateNote = async (
       updates.title = title.trim();
     }
 
-    // Validate content.
     if (content !== undefined) {
       if (typeof content !== "string") {
         res.status(400).json({
@@ -284,10 +301,11 @@ export const updateNote = async (
       updates.content = content;
     }
 
-    // Validate folder.
+    let targetFolderId: mongoose.Types.ObjectId | null | undefined;
+
     if (folderId !== undefined) {
       if (folderId === null) {
-        updates.folderId = null;
+        targetFolderId = null;
       } else {
         if (
           typeof folderId !== "string" ||
@@ -300,21 +318,10 @@ export const updateNote = async (
           return;
         }
 
-        const folder = await Folder.findOne({
-          _id: folderId,
-          userId,
-        });
-
-        if (!folder) {
-          res.status(404).json({
-            success: false,
-            message: "Folder not found",
-          });
-          return;
-        }
-
-        updates.folderId = new mongoose.Types.ObjectId(folderId);
+        targetFolderId = new mongoose.Types.ObjectId(folderId);
       }
+
+      updates.folderId = targetFolderId;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -325,7 +332,6 @@ export const updateNote = async (
       return;
     }
 
-    // Retrieve existing note.
     const existingNote = await Note.findOne({
       _id: id,
       userId,
@@ -339,7 +345,6 @@ export const updateNote = async (
       return;
     }
 
-    // Regenerate embedding when title or content changes.
     if (
       updates.title !== undefined ||
       updates.content !== undefined
@@ -356,15 +361,68 @@ export const updateNote = async (
           "Updated note embedding generation failed:",
           error,
         );
-
-        // Keep the existing embedding if generation fails.
       }
     }
 
-    let updatedNote: typeof existingNote | null = null;
+    let updatedNote: InstanceType<typeof Note> | null = null;
 
     await session.withTransaction(async () => {
-      // Atomic optimistic concurrency check.
+      // Re-read the note inside the transaction.
+      const currentNote = await Note.findOne({
+        _id: id,
+        userId,
+      }).session(session);
+
+      if (!currentNote) {
+        throw new Error("NOTE_NOT_FOUND");
+      }
+
+      if (currentNote.version !== expectedVersion) {
+        throw new Error("NOTE_VERSION_CONFLICT");
+      }
+
+      const oldFolderId = currentNote.folderId?.toString() ?? null;
+      const newFolderId =
+        targetFolderId === undefined
+          ? oldFolderId
+          : targetFolderId?.toString() ?? null;
+
+      // Only coordinate folders when membership changes.
+      if (oldFolderId !== newFolderId) {
+        const folderIds = [
+          oldFolderId,
+          newFolderId,
+        ]
+          .filter((value): value is string => value !== null)
+          .sort();
+
+        for (const folderIdToUpdate of folderIds) {
+          const folder = await Folder.findOneAndUpdate(
+            {
+              _id: folderIdToUpdate,
+              userId,
+            },
+            {
+              $inc: {
+                membershipRevision: 1,
+              },
+            },
+            {
+              new: true,
+              session,
+            },
+          );
+
+          if (!folder) {
+            throw new Error(
+              folderIdToUpdate === newFolderId
+                ? "FOLDER_NOT_FOUND"
+                : "NOTE_FOLDER_NOT_FOUND",
+            );
+          }
+        }
+      }
+
       updatedNote = await Note.findOneAndUpdate(
         {
           _id: id,
@@ -385,19 +443,9 @@ export const updateNote = async (
       );
 
       if (!updatedNote) {
-        const currentNote = await Note.findOne({
-          _id: id,
-          userId,
-        }).session(session);
-
-        if (!currentNote) {
-          throw new Error("NOTE_NOT_FOUND");
-        }
-
         throw new Error("NOTE_VERSION_CONFLICT");
       }
 
-      // Record version-aware sync event.
       await recordSyncChange(
         {
           userId,
@@ -423,23 +471,38 @@ export const updateNote = async (
       note: updatedNote,
     });
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === "NOTE_NOT_FOUND") {
-        res.status(404).json({
-          success: false,
-          message: "Note not found",
-        });
-        return;
-      }
+    const errorMessage =
+      error instanceof Error ? error.message : "";
 
-      if (error.message === "NOTE_VERSION_CONFLICT") {
-        res.status(409).json({
-          success: false,
-          message:
-            "Note was modified by another device. Please sync and resolve the conflict.",
-        });
-        return;
-      }
+    if (
+      errorMessage === "NOTE_NOT_FOUND" ||
+      errorMessage === "NOTE_FOLDER_NOT_FOUND"
+    ) {
+      res.status(404).json({
+        success: false,
+        message:
+          errorMessage === "NOTE_NOT_FOUND"
+            ? "Note not found"
+            : "The note's current folder no longer exists",
+      });
+      return;
+    }
+
+    if (errorMessage === "FOLDER_NOT_FOUND") {
+      res.status(404).json({
+        success: false,
+        message: "Target folder not found",
+      });
+      return;
+    }
+
+    if (errorMessage === "NOTE_VERSION_CONFLICT") {
+      res.status(409).json({
+        success: false,
+        message:
+          "Note was modified by another device. Please sync and resolve the conflict.",
+      });
+      return;
     }
 
     console.error("Update note error:", error);

@@ -1,4 +1,3 @@
-
 import { Request, Response } from "express";
 import mongoose from "mongoose";
 
@@ -9,10 +8,7 @@ import { generateEmbedding } from "../ai/embedding.service";
 import { SyncChange } from "./sync.model";
 import { recordSyncChange } from "./sync.service";
 
-import {
-  pushSyncSchema,
-  pullSyncQuerySchema,
-} from "./sync.validation";
+import { pushSyncSchema, pullSyncQuerySchema } from "./sync.validation";
 
 export const pushSyncChanges = async (
   req: Request,
@@ -118,9 +114,9 @@ export const pushSyncChanges = async (
               }
             }
 
-            const existingNote = await Note.findById(
-              change.entityId,
-            ).session(session);
+            const existingNote = await Note.findById(change.entityId).session(
+              session,
+            );
 
             if (existingNote) {
               throw new Error("NOTE_ALREADY_EXISTS");
@@ -260,47 +256,82 @@ export const pushSyncChanges = async (
           }
 
           // DELETE NOTE
+          // DELETE FOLDER
           else if (change.operation === "delete") {
             if (change.expectedVersion === undefined) {
-              throw new Error("NOTE_EXPECTED_VERSION_REQUIRED");
+              throw new Error("FOLDER_EXPECTED_VERSION_REQUIRED");
             }
 
-            const existingNote = await Note.findOne({
+            const existingFolder = await Folder.findOne({
               _id: change.entityId,
               userId,
             }).session(session);
 
-            if (!existingNote) {
-              throw new Error("NOTE_NOT_FOUND");
+            if (!existingFolder) {
+              throw new Error("FOLDER_NOT_FOUND");
             }
 
-            if (existingNote.version !== change.expectedVersion) {
-              throw new Error("NOTE_VERSION_CONFLICT");
+            if (existingFolder.version !== change.expectedVersion) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
             }
 
-            const note = await Note.findOneAndDelete(
+            // Acquire a write lock on the folder.
+            // Note creation and movement use the same membershipRevision.
+            const lockedFolder = await Folder.findOneAndUpdate(
               {
                 _id: change.entityId,
                 userId,
                 version: change.expectedVersion,
               },
+              {
+                $inc: {
+                  membershipRevision: 1,
+                },
+              },
+              {
+                new: true,
+                session,
+              },
+            );
+
+            if (!lockedFolder) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
+            }
+
+            // Check folder membership after acquiring the write lock.
+            const notesInsideFolder = await Note.exists({
+              userId,
+              folderId: lockedFolder._id,
+            }).session(session);
+
+            if (notesInsideFolder) {
+              throw new Error("FOLDER_NOT_EMPTY");
+            }
+
+            const folder = await Folder.findOneAndDelete(
+              {
+                _id: change.entityId,
+                userId,
+                version: change.expectedVersion,
+                membershipRevision: lockedFolder.membershipRevision,
+              },
               { session },
             );
 
-            if (!note) {
-              throw new Error("NOTE_VERSION_CONFLICT");
+            if (!folder) {
+              throw new Error("FOLDER_VERSION_CONFLICT");
             }
 
             await recordSyncChange(
               {
                 userId,
-                entityType: "note",
+                entityType: "folder",
                 entityId: change.entityId,
                 operation: "delete",
                 clientMutationId: change.clientMutationId,
                 data: {
-                  title: note.title,
-                  version: note.version,
+                  name: folder.name,
+                  version: folder.version,
                   deletedAt: new Date().toISOString(),
                 },
               },
@@ -312,7 +343,6 @@ export const pushSyncChanges = async (
         // =====================================
         // FOLDER SYNCHRONIZATION
         // =====================================
-
         else if (change.entityType === "folder") {
           // CREATE FOLDER
           if (change.operation === "create") {

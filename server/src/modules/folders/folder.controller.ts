@@ -386,7 +386,6 @@ export const deleteFolder = async (
       return;
     }
 
-    // Validate expected version.
     if (
       !Number.isInteger(expectedVersion) ||
       expectedVersion < 1
@@ -399,36 +398,53 @@ export const deleteFolder = async (
     }
 
     await session.withTransaction(async () => {
-      // Check folder existence and version.
-      const folder = await Folder.findOne({
-        _id: id,
-        userId
-      }).session(session);
+      // Acquire a write lock on the folder document.
+      // Note creation and movement update this same document.
+      const folder = await Folder.findOneAndUpdate(
+        {
+          _id: id,
+          userId,
+          version: expectedVersion
+        },
+        {
+          $inc: {
+            membershipRevision: 1
+          }
+        },
+        {
+          new: true,
+          session
+        }
+      );
 
       if (!folder) {
-        throw new Error("FOLDER_NOT_FOUND");
-      }
+        const currentFolder = await Folder.findOne({
+          _id: id,
+          userId
+        }).session(session);
 
-      if (folder.version !== expectedVersion) {
+        if (!currentFolder) {
+          throw new Error("FOLDER_NOT_FOUND");
+        }
+
         throw new Error("FOLDER_VERSION_CONFLICT");
       }
 
-      // Prevent deleting folders containing notes.
       const hasNotes = await Note.exists({
         userId,
-        folderId: id
+        folderId: folder._id
       }).session(session);
 
       if (hasNotes) {
         throw new Error("FOLDER_NOT_EMPTY");
       }
 
-      // Delete only if the version still matches.
       const deletedFolder = await Folder.findOneAndDelete(
         {
           _id: id,
           userId,
-          version: expectedVersion
+          version: expectedVersion,
+          membershipRevision: folder.membershipRevision
         },
         { session }
       );
@@ -437,7 +453,6 @@ export const deleteFolder = async (
         throw new Error("FOLDER_VERSION_CONFLICT");
       }
 
-      // Record version-aware deletion tombstone.
       await recordSyncChange(
         {
           userId,

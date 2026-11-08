@@ -5,6 +5,7 @@ export interface IFolder extends Document {
   name: string;
   color: string;
   version: number;
+  membershipRevision: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,11 +30,19 @@ const folderSchema = new Schema<IFolder>(
       default: "#F47768",
     },
 
-    // Optimistic concurrency control.
     version: {
       type: Number,
       default: 1,
       min: 1,
+    },
+
+    // Internal concurrency field.
+    // Updated when notes enter this folder or when deletion
+    // checks whether the folder is empty.
+    membershipRevision: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   {
@@ -42,6 +51,12 @@ const folderSchema = new Schema<IFolder>(
 );
 
 // Prevent duplicate folder names for the same user.
-folderSchema.index({ userId: 1, name: 1 }, { unique: true });
+folderSchema.index(
+  { userId: 1, name: 1 },
+  { unique: true },
+);
 
-export const Folder = mongoose.model<IFolder>("Folder", folderSchema);
+export const Folder = mongoose.model<IFolder>(
+  "Folder",
+  folderSchema,
+);

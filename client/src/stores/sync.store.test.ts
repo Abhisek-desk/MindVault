@@ -1,11 +1,4 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { synchronizeData } from "../services/sync.service";
 import { useSyncStore } from "./sync.store";
@@ -64,16 +57,12 @@ describe("Sync Store", () => {
   });
 
   it("records an error when synchronization fails", async () => {
-    mockedSynchronizeData.mockRejectedValue(
-      new Error("Network unavailable")
-    );
+    mockedSynchronizeData.mockRejectedValue(new Error("Network unavailable"));
 
     await useSyncStore.getState().syncNow();
 
     expect(useSyncStore.getState().status).toBe("error");
-    expect(useSyncStore.getState().error).toBe(
-      "Network unavailable"
-    );
+    expect(useSyncStore.getState().error).toBe("Network unavailable");
   });
 
   it("prevents simultaneous synchronization requests", async () => {
@@ -83,7 +72,7 @@ describe("Sync Store", () => {
       () =>
         new Promise<void>((resolve) => {
           finishSync = resolve;
-        })
+        }),
     );
 
     const firstSync = useSyncStore.getState().syncNow();
@@ -101,5 +90,34 @@ describe("Sync Store", () => {
     await firstSync;
 
     expect(useSyncStore.getState().status).toBe("synced");
+  });
+  it("can recover after a failed synchronization", async () => {
+    mockedSynchronizeData
+      .mockRejectedValueOnce(new Error("Network unavailable"))
+      .mockResolvedValueOnce(undefined);
+
+    await useSyncStore.getState().syncNow();
+
+    expect(useSyncStore.getState().status).toBe("error");
+
+    await useSyncStore.getState().syncNow();
+
+    expect(mockedSynchronizeData).toHaveBeenCalledTimes(2);
+    expect(useSyncStore.getState().status).toBe("synced");
+    expect(useSyncStore.getState().error).toBeNull();
+  });
+
+  it("does not retain an old error after successful synchronization", async () => {
+    useSyncStore.setState({
+      status: "error",
+      error: "Previous synchronization failed",
+    });
+
+    mockedSynchronizeData.mockResolvedValue(undefined);
+
+    await useSyncStore.getState().syncNow();
+
+    expect(useSyncStore.getState().status).toBe("synced");
+    expect(useSyncStore.getState().error).toBeNull();
   });
 });

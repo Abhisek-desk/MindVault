@@ -15,7 +15,7 @@ async function checkInternetConnection(): Promise<boolean> {
         method: "GET",
         mode: "no-cors",
         cache: "no-store",
-        signal: AbortSignal.timeout(4000)
+        signal: AbortSignal.timeout(4000),
       }
     );
 
@@ -41,6 +41,9 @@ function SyncManager() {
     let mounted = true;
     let wasOnline = false;
     let checking = false;
+    let lastSyncAttempt = 0;
+
+    const RETRY_INTERVAL = 30000;
 
     const verifyAndSync = async () => {
       if (checking || !mounted) return;
@@ -58,10 +61,34 @@ function SyncManager() {
           return;
         }
 
-        // Sync when internet becomes available.
+        const now = Date.now();
+
+        // Internet has just been restored.
         if (!wasOnline) {
           wasOnline = true;
-          console.log("Internet restored. Starting synchronization.");
+          lastSyncAttempt = now;
+
+          console.log(
+            "Internet restored. Starting synchronization."
+          );
+
+          await syncNow();
+          return;
+        }
+
+        // Retry failed synchronization every 30 seconds.
+        const syncStatus = useSyncStore.getState().status;
+
+        if (
+          syncStatus === "error" &&
+          now - lastSyncAttempt >= RETRY_INTERVAL
+        ) {
+          lastSyncAttempt = now;
+
+          console.log(
+            "Retrying failed synchronization."
+          );
+
           await syncNow();
         }
       } finally {
@@ -81,7 +108,7 @@ function SyncManager() {
     // Check immediately when authenticated.
     void verifyAndSync();
 
-    // Recheck connectivity every 10 seconds.
+    // Check connectivity every 10 seconds.
     const interval = window.setInterval(() => {
       void verifyAndSync();
     }, 10000);
@@ -91,6 +118,7 @@ function SyncManager() {
 
     return () => {
       mounted = false;
+
       window.clearInterval(interval);
 
       window.removeEventListener("online", handleOnline);

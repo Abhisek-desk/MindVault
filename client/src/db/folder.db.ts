@@ -12,6 +12,12 @@ const generateId = (): string => {
     .join("");
 };
 
+const validateFolderId = (id: string): void => {
+  if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+    throw new Error("Invalid folder ID.");
+  }
+};
+
 // =====================================
 // ADD CHANGE TO OFFLINE SYNC QUEUE
 // =====================================
@@ -105,6 +111,7 @@ export const getLocalFolders = async (): Promise<LocalFolder[]> => {
 export const getLocalFolderById = async (
   id: string,
 ): Promise<LocalFolder | undefined> => {
+  validateFolderId(id);
   return db.folders.get(id);
 };
 
@@ -116,6 +123,7 @@ export const updateLocalFolder = async (
   id: string,
   updates: Partial<Pick<LocalFolder, "name" | "color">>,
 ): Promise<LocalFolder> => {
+  validateFolderId(id);
   return db.transaction("rw", db.folders, db.syncQueue, async () => {
     const existingFolder = await db.folders.get(id);
 
@@ -213,6 +221,7 @@ export const updateLocalFolder = async (
 // =====================================
 
 export const deleteLocalFolder = async (id: string): Promise<void> => {
+  validateFolderId(id);
   await db.transaction("rw", db.folders, db.syncQueue, async () => {
     const existingFolder = await db.folders.get(id);
 

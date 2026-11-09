@@ -2,13 +2,13 @@ import { Request, Response } from "express";
 import { KnowledgePack } from "./knowledge-pack.model";
 import {
   getKnowledgePacksSchema,
-  knowledgePackIdSchema
+  knowledgePackIdSchema,
 } from "./knowledge-pack.validation";
 
 // Get all published Knowledge Packs
 export const getKnowledgePacks = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const validation = getKnowledgePacksSchema.safeParse(req.query);
@@ -17,21 +17,15 @@ export const getKnowledgePacks = async (
       res.status(400).json({
         success: false,
         message: "Invalid search parameters",
-        errors: validation.error.flatten()
+        errors: validation.error.flatten(),
       });
       return;
     }
 
-    const {
-      category,
-      language,
-      search,
-      page,
-      limit
-    } = validation.data;
+    const { category, language, search, page, limit } = validation.data;
 
     const filter: Record<string, unknown> = {
-      isPublished: true
+      isPublished: true,
     };
 
     if (category) {
@@ -43,17 +37,14 @@ export const getKnowledgePacks = async (
     }
 
     if (search) {
-      const escapedSearch = search.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-      );
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
       const searchRegex = new RegExp(escapedSearch, "i");
 
       filter.$or = [
         { title: searchRegex },
         { description: searchRegex },
-        { tags: searchRegex }
+        { tags: searchRegex },
       ];
     }
 
@@ -67,7 +58,7 @@ export const getKnowledgePacks = async (
         .limit(limit)
         .lean(),
 
-      KnowledgePack.countDocuments(filter)
+      KnowledgePack.countDocuments(filter),
     ]);
 
     res.status(200).json({
@@ -76,14 +67,14 @@ export const getKnowledgePacks = async (
       total,
       currentPage: page,
       totalPages: Math.ceil(total / limit),
-      packs
+      packs,
     });
   } catch (error) {
     console.error("Get Knowledge Packs error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch Knowledge Packs"
+      message: "Failed to fetch Knowledge Packs",
     });
   }
 };
@@ -91,7 +82,7 @@ export const getKnowledgePacks = async (
 // Get one published Knowledge Pack
 export const getKnowledgePackById = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const validation = knowledgePackIdSchema.safeParse(req.params);
@@ -99,34 +90,36 @@ export const getKnowledgePackById = async (
     if (!validation.success) {
       res.status(400).json({
         success: false,
-        message: "Invalid Knowledge Pack ID"
+        message: "Invalid Knowledge Pack ID",
       });
       return;
     }
 
     const pack = await KnowledgePack.findOne({
       _id: validation.data.id,
-      isPublished: true
-    }).select("-__v");
+      isPublished: true,
+    })
+      .select("-__v")
+      .lean();  
 
     if (!pack) {
       res.status(404).json({
         success: false,
-        message: "Knowledge Pack not found"
+        message: "Knowledge Pack not found",
       });
       return;
     }
 
     res.status(200).json({
       success: true,
-      pack
+      pack,
     });
   } catch (error) {
     console.error("Get Knowledge Pack error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch Knowledge Pack"
+      message: "Failed to fetch Knowledge Pack",
     });
   }
 };

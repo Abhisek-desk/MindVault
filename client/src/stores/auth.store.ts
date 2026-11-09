@@ -39,13 +39,20 @@ function getCachedUser(): AuthUser | null {
     const user = JSON.parse(stored) as AuthUser;
 
     if (
-      !user.id ||
-      !user.name ||
-      !user.email ||
-      !user.preferredLanguage
-    ) {
-      return null;
-    }
+  typeof user.id !== "string" ||
+  !/^[a-fA-F0-9]{24}$/.test(user.id) ||
+  typeof user.name !== "string" ||
+  user.name.length < 2 ||
+  user.name.length > 80 ||
+  typeof user.email !== "string" ||
+  user.email.length > 254 ||
+  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) ||
+  typeof user.preferredLanguage !== "string" ||
+  user.preferredLanguage.length < 2 ||
+  user.preferredLanguage.length > 20
+) {
+  return null;
+}
 
     return user;
   } catch {

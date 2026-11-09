@@ -83,6 +83,10 @@ export const clearSyncQueue = async (): Promise<void> => {
 export const saveSyncCursor = async (
   cursor: string
 ): Promise<void> => {
+  if (!/^[a-fA-F0-9]{24}$/.test(cursor)) {
+    throw new Error("Invalid synchronization cursor.");
+  }
+
   await db.syncMeta.put({
     key: "lastSyncCursor",
     value: cursor

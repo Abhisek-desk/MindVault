@@ -7,7 +7,7 @@ import { KnowledgePack } from "../knowledge-packs/knowledge-pack.model";
 // Register a Knowledge Pack download
 export const createDownload = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = req.userId;
@@ -16,7 +16,7 @@ export const createDownload = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -24,20 +24,20 @@ export const createDownload = async (
     if (!mongoose.isValidObjectId(packId)) {
       res.status(400).json({
         success: false,
-        message: "Invalid Knowledge Pack ID"
+        message: "Invalid Knowledge Pack ID",
       });
       return;
     }
 
     const pack = await KnowledgePack.findOne({
       _id: packId,
-      isPublished: true
+      isPublished: true,
     });
 
     if (!pack) {
       res.status(404).json({
         success: false,
-        message: "Knowledge Pack not found"
+        message: "Knowledge Pack not found",
       });
       return;
     }
@@ -48,28 +48,28 @@ export const createDownload = async (
         $set: {
           version: pack.version,
           status: "pending",
-          downloadedAt: null
-        }
+          downloadedAt: null,
+        },
       },
       {
         upsert: true,
         new: true,
         runValidators: true,
-        setDefaultsOnInsert: true
-      }
+        setDefaultsOnInsert: true,
+      },
     );
 
     res.status(201).json({
       success: true,
       message: "Download registered successfully",
-      download
+      download,
     });
   } catch (error) {
     console.error("Create download error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to register download"
+      message: "Failed to register download",
     });
   }
 };
@@ -77,7 +77,7 @@ export const createDownload = async (
 // Get all downloads belonging to the logged-in user
 export const getDownloads = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = req.userId;
@@ -85,7 +85,7 @@ export const getDownloads = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -93,7 +93,8 @@ export const getDownloads = async (
     const downloads = await Download.find({ userId })
       .populate({
         path: "knowledgePackId",
-        select: "title description category language version coverImage fileSizeBytes"
+        select:
+          "title description category language version coverImage fileSizeBytes",
       })
       .sort({ updatedAt: -1 })
       .lean();
@@ -101,14 +102,14 @@ export const getDownloads = async (
     res.status(200).json({
       success: true,
       count: downloads.length,
-      downloads
+      downloads,
     });
   } catch (error) {
     console.error("Get downloads error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to fetch downloads"
+      message: "Failed to fetch downloads",
     });
   }
 };
@@ -116,7 +117,7 @@ export const getDownloads = async (
 // Mark a download as completed
 export const completeDownload = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = req.userId;
@@ -125,7 +126,7 @@ export const completeDownload = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -133,26 +134,47 @@ export const completeDownload = async (
     if (!mongoose.isValidObjectId(packId)) {
       res.status(400).json({
         success: false,
-        message: "Invalid Knowledge Pack ID"
+        message: "Invalid Knowledge Pack ID",
+      });
+      return;
+    }
+
+    const pack = await KnowledgePack.findOne({
+      _id: packId,
+      isPublished: true,
+    }).select("version");
+
+    if (!pack) {
+      res.status(404).json({
+        success: false,
+        message: "Knowledge Pack not found or is no longer published",
       });
       return;
     }
 
     const download = await Download.findOneAndUpdate(
-      { userId, knowledgePackId: packId },
+      {
+        userId,
+        knowledgePackId: packId,
+        version: pack.version,
+        status: "pending",
+      },
       {
         $set: {
           status: "completed",
-          downloadedAt: new Date()
-        }
+          downloadedAt: new Date(),
+        },
       },
-      { new: true, runValidators: true }
+      {
+        returnDocument: "after",
+        runValidators: true,
+      },
     );
 
     if (!download) {
       res.status(404).json({
         success: false,
-        message: "Download record not found. Register the download first."
+        message: "Download record not found. Register the download first.",
       });
       return;
     }
@@ -160,14 +182,14 @@ export const completeDownload = async (
     res.status(200).json({
       success: true,
       message: "Download marked as completed",
-      download
+      download,
     });
   } catch (error) {
     console.error("Complete download error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to complete download"
+      message: "Failed to complete download",
     });
   }
 };
@@ -175,7 +197,7 @@ export const completeDownload = async (
 // Remove a download record
 export const deleteDownload = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const userId = req.userId;
@@ -184,7 +206,7 @@ export const deleteDownload = async (
     if (!userId) {
       res.status(401).json({
         success: false,
-        message: "Authentication required"
+        message: "Authentication required",
       });
       return;
     }
@@ -192,34 +214,34 @@ export const deleteDownload = async (
     if (!mongoose.isValidObjectId(packId)) {
       res.status(400).json({
         success: false,
-        message: "Invalid Knowledge Pack ID"
+        message: "Invalid Knowledge Pack ID",
       });
       return;
     }
 
     const download = await Download.findOneAndDelete({
       userId,
-      knowledgePackId: packId
+      knowledgePackId: packId,
     });
 
     if (!download) {
       res.status(404).json({
         success: false,
-        message: "Download record not found"
+        message: "Download record not found",
       });
       return;
     }
 
     res.status(200).json({
       success: true,
-      message: "Download record removed successfully"
+      message: "Download record removed successfully",
     });
   } catch (error) {
     console.error("Delete download error:", error);
 
     res.status(500).json({
       success: false,
-      message: "Failed to remove download"
+      message: "Failed to remove download",
     });
   }
 };

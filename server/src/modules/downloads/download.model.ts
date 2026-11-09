@@ -5,7 +5,7 @@ export interface IDownload extends Document {
   knowledgePackId: mongoose.Types.ObjectId;
   version: string;
   status: "pending" | "completed" | "failed";
-  downloadedAt?: Date;
+  downloadedAt?: Date | null;
 }
 
 const downloadSchema = new Schema<IDownload>(
@@ -13,43 +13,39 @@ const downloadSchema = new Schema<IDownload>(
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
 
     knowledgePackId: {
       type: Schema.Types.ObjectId,
       ref: "KnowledgePack",
-      required: true
+      required: true,
     },
 
     version: {
       type: String,
-      required: true
+      required: true,
+      trim: true,
+      maxlength: 50,
     },
 
     status: {
       type: String,
       enum: ["pending", "completed", "failed"],
-      default: "pending"
+      default: "pending",
     },
 
     downloadedAt: {
       type: Date,
-      default: null
-    }
+      default: null,
+    },
   },
   {
-    timestamps: true
-  }
+    timestamps: true,
+  },
 );
 
 // A user can have only one download record per pack.
-downloadSchema.index(
-  { userId: 1, knowledgePackId: 1 },
-  { unique: true }
-);
+downloadSchema.index({ userId: 1, knowledgePackId: 1 }, { unique: true });
 
-export const Download = mongoose.model<IDownload>(
-  "Download",
-  downloadSchema
-);
+export const Download = mongoose.model<IDownload>("Download", downloadSchema);

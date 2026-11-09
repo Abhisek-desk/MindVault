@@ -1,4 +1,3 @@
-import { lazy, Suspense } from "react";
 import {
   createBrowserRouter,
   Navigate,
@@ -9,75 +8,18 @@ import NotFound from "../components/common/NotFound";
 import ProtectedRoute from "../features/auth/routes/ProtectedRoute";
 import PublicRoute from "../features/auth/routes/PublicRoute";
 
-// =====================================
-// LAZY-LOADED PAGES
-// =====================================
-
-const LoginPage = lazy(
-  () => import("../features/auth/pages/LoginPage")
-);
-
-const RegisterPage = lazy(
-  () => import("../features/auth/pages/RegisterPage")
-);
-
-const DashboardPage = lazy(
-  () => import("../features/dashboard/pages/DashboardPage")
-);
-
-const NotesPage = lazy(
-  () => import("../features/notes/pages/NotesPage")
-);
-
-const FoldersPage = lazy(
-  () => import("../features/library/pages/FoldersPage")
-);
-
-const LibraryPage = lazy(
-  () => import("../features/library/pages/LibraryPage")
-);
-
-const PackReaderPage = lazy(
-  () => import("../features/library/pages/PackReaderPage")
-);
-
-const SearchPage = lazy(
-  () => import("../features/search/pages/SearchPage")
-);
-
-const ConflictsPage = lazy(
-  () => import("../features/sync/pages/ConflictsPage")
-);
-
-// =====================================
-// LOADING FALLBACK
-// =====================================
-
-function PageLoader() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F8F1E5]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-9 w-9 animate-spin rounded-full border-4 border-[#17243D]/20 border-t-[#F47768]" />
-
-        <p className="text-sm font-medium text-[#17243D]">
-          Loading Mind Vault...
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// =====================================
-// ROUTE WRAPPER
-// =====================================
-
-function loadPage(element: React.ReactNode) {
-  return (
-    <Suspense fallback={<PageLoader />}>
-      {element}
-    </Suspense>
-  );
-}
+import {
+  LoginPage,
+  RegisterPage,
+  DashboardPage,
+  NotesPage,
+  FoldersPage,
+  LibraryPage,
+  PackReaderPage,
+  SearchPage,
+  ConflictsPage,
+  RoutePage,
+} from "./route-pages";
 
 // =====================================
 // APPLICATION ROUTER
@@ -89,11 +31,19 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/login",
-        element: loadPage(<LoginPage />),
+        element: (
+          <RoutePage>
+            <LoginPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/register",
-        element: loadPage(<RegisterPage />),
+        element: (
+          <RoutePage>
+            <RegisterPage />
+          </RoutePage>
+        ),
       },
     ],
   },
@@ -103,31 +53,59 @@ const router = createBrowserRouter([
     children: [
       {
         path: "/dashboard",
-        element: loadPage(<DashboardPage />),
+        element: (
+          <RoutePage>
+            <DashboardPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/notes",
-        element: loadPage(<NotesPage />),
+        element: (
+          <RoutePage>
+            <NotesPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/folders",
-        element: loadPage(<FoldersPage />),
+        element: (
+          <RoutePage>
+            <FoldersPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/library",
-        element: loadPage(<LibraryPage />),
+        element: (
+          <RoutePage>
+            <LibraryPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/library/read/:packId",
-        element: loadPage(<PackReaderPage />),
+        element: (
+          <RoutePage>
+            <PackReaderPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/search",
-        element: loadPage(<SearchPage />),
+        element: (
+          <RoutePage>
+            <SearchPage />
+          </RoutePage>
+        ),
       },
       {
         path: "/conflicts",
-        element: loadPage(<ConflictsPage />),
+        element: (
+          <RoutePage>
+            <ConflictsPage />
+          </RoutePage>
+        ),
       },
     ],
   },

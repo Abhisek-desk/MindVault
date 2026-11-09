@@ -11,15 +11,12 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
 
-      includeAssets: [
-        "favicon.svg",
-      ],
+      includeAssets: ["favicon.svg"],
 
       manifest: {
         name: "Mind Vault",
         short_name: "MindVault",
-        description:
-          "Your Knowledge. Your Memory. Always Available.",
+        description: "Your Knowledge. Your Memory. Always Available.",
 
         theme_color: "#17243D",
         background_color: "#F8F1E5",
@@ -32,11 +29,11 @@ export default defineConfig({
       },
 
       workbox: {
-        globPatterns: [
-          "**/*.{js,css,html,ico,png,svg,woff2}",
-        ],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
 
         navigateFallback: "index.html",
+
+        navigateFallbackDenylist: [/^\/api\//, /^\/downloads\//],
 
         cleanupOutdatedCaches: true,
 

@@ -15,8 +15,30 @@ import syncRoutes from "./modules/sync/sync.routes";
 
 const app = express();
 
-// Security headers.
-app.use(helmet());
+// Security headers and Content Security Policy.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        baseUri: ["'self'"],
+        fontSrc: ["'self'", "data:"],
+        formAction: ["'self'"],
+        frameAncestors: ["'none'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        objectSrc: ["'none'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        connectSrc: [
+          "'self'",
+          process.env.CLIENT_URL || "http://localhost:5173",
+        ],
+        upgradeInsecureRequests:
+          process.env.NODE_ENV === "production" ? [] : null,
+      },
+    },
+  })
+);
 
 // Restrict cross-origin requests.
 app.use(

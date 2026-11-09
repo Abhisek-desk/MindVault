@@ -1,16 +1,13 @@
 import { create } from "zustand";
 
-import type {
-  AuthState,
-  AuthUser
-} from "../features/auth/auth.types";
+import type { AuthState, AuthUser } from "../features/auth/auth.types";
 
 import {
   registerUser,
   loginUser,
   logoutUser,
   getCurrentUser,
-  refreshSession
+  refreshSession,
 } from "../features/auth/auth.service";
 
 import { ApiError } from "../services/api";
@@ -19,10 +16,7 @@ const AUTH_CACHE_KEY = "mindvault_offline_user";
 
 function saveCachedUser(user: AuthUser): void {
   try {
-    localStorage.setItem(
-      AUTH_CACHE_KEY,
-      JSON.stringify(user)
-    );
+    localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(user));
   } catch (error) {
     console.error("Could not save offline profile:", error);
   }
@@ -39,20 +33,20 @@ function getCachedUser(): AuthUser | null {
     const user = JSON.parse(stored) as AuthUser;
 
     if (
-  typeof user.id !== "string" ||
-  !/^[a-fA-F0-9]{24}$/.test(user.id) ||
-  typeof user.name !== "string" ||
-  user.name.length < 2 ||
-  user.name.length > 80 ||
-  typeof user.email !== "string" ||
-  user.email.length > 254 ||
-  !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) ||
-  typeof user.preferredLanguage !== "string" ||
-  user.preferredLanguage.length < 2 ||
-  user.preferredLanguage.length > 20
-) {
-  return null;
-}
+      typeof user.id !== "string" ||
+      !/^[a-fA-F0-9]{24}$/.test(user.id) ||
+      typeof user.name !== "string" ||
+      user.name.length < 2 ||
+      user.name.length > 80 ||
+      typeof user.email !== "string" ||
+      user.email.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email) ||
+      typeof user.preferredLanguage !== "string" ||
+      user.preferredLanguage.length < 2 ||
+      user.preferredLanguage.length > 20
+    ) {
+      return null;
+    }
 
     return user;
   } catch {
@@ -61,20 +55,22 @@ function getCachedUser(): AuthUser | null {
 }
 
 function clearCachedUser(): void {
-  localStorage.removeItem(AUTH_CACHE_KEY);
+  try {
+    localStorage.removeItem(AUTH_CACHE_KEY);
+  } catch (error) {
+    console.error("Could not clear offline profile:", error);
+  }
 }
 
 function isAuthenticationError(error: unknown): boolean {
   return (
-    error instanceof ApiError &&
-    (error.status === 401 || error.status === 403)
+    error instanceof ApiError && (error.status === 401 || error.status === 403)
   );
 }
 
 function isServerOrNetworkError(error: unknown): boolean {
   return (
-    error instanceof ApiError &&
-    (error.status === 0 || error.status >= 500)
+    error instanceof ApiError && (error.status === 0 || error.status >= 500)
   );
 }
 
@@ -91,7 +87,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set({
       user,
-      isAuthenticated: true
+      isAuthenticated: true,
     });
   },
 
@@ -103,7 +99,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set({
       user,
-      isAuthenticated: true
+      isAuthenticated: true,
     });
   },
 
@@ -121,7 +117,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         user: null,
         isAuthenticated: false,
-        isLoading: false
+        isLoading: false,
       });
     }
   },
@@ -137,7 +133,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         user: cachedUser,
         isAuthenticated: !!cachedUser,
-        isLoading: false
+        isLoading: false,
       });
 
       return;
@@ -152,7 +148,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         user,
         isAuthenticated: true,
-        isLoading: false
+        isLoading: false,
       });
 
       return;
@@ -169,7 +165,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           set({
             user,
             isAuthenticated: true,
-            isLoading: false
+            isLoading: false,
           });
 
           return;
@@ -181,7 +177,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({
               user: null,
               isAuthenticated: false,
-              isLoading: false
+              isLoading: false,
             });
 
             return;
@@ -192,7 +188,7 @@ export const useAuthStore = create<AuthState>((set) => ({
             set({
               user: cachedUser,
               isAuthenticated: !!cachedUser,
-              isLoading: false
+              isLoading: false,
             });
 
             return;
@@ -205,7 +201,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({
           user: cachedUser,
           isAuthenticated: !!cachedUser,
-          isLoading: false
+          isLoading: false,
         });
 
         return;
@@ -217,8 +213,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       set({
         user: null,
         isAuthenticated: false,
-        isLoading: false
+        isLoading: false,
       });
     }
-  }
+  },
 }));

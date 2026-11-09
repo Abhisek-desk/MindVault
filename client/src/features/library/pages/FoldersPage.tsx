@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   Folder,
   Plus,
@@ -54,7 +60,7 @@ function FoldersPage() {
   // LOAD FOLDERS AND NOTE COUNTS
   // =====================================
 
-  const loadFolders = async () => {
+  const loadFolders = useCallback(async () => {
     try {
       const [localFolders, notes] = await Promise.all([
         getLocalFolders(),
@@ -76,11 +82,45 @@ function FoldersPage() {
     } catch {
       setError("Unable to load folders.");
     }
-  };
+  }, []);
 
   useEffect(() => {
-    void loadFolders();
-  }, []);
+  let cancelled = false;
+
+  const loadInitialFolders = async () => {
+    try {
+      const [localFolders, notes] = await Promise.all([
+        getLocalFolders(),
+        db.notes.toArray(),
+      ]);
+
+      if (cancelled) return;
+
+      setFolders(localFolders);
+
+      const counts: Record<string, number> = {};
+
+      notes.forEach((note) => {
+        if (note.folderId) {
+          counts[note.folderId] =
+            (counts[note.folderId] || 0) + 1;
+        }
+      });
+
+      setNoteCounts(counts);
+    } catch {
+      if (!cancelled) {
+        setError("Unable to load folders.");
+      }
+    }
+  };
+
+  void loadInitialFolders();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   // =====================================
   // FILTER FOLDERS
@@ -198,7 +238,6 @@ function FoldersPage() {
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5]">
-
       {/* SIDEBAR */}
 
       <Sidebar
@@ -209,17 +248,14 @@ function FoldersPage() {
       {/* MAIN CONTENT */}
 
       <main className="min-w-0 flex-1">
-
         <DashboardHeader
           onMenuClick={() => setIsSidebarOpen(true)}
         />
 
         <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
-
           {/* PAGE HEADING */}
 
           <div className="mb-8 flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-
             <div>
               <p className="mb-2 text-sm font-medium text-[#F47768]">
                 ORGANIZE YOUR KNOWLEDGE
@@ -241,7 +277,6 @@ function FoldersPage() {
               <Plus size={19} />
               Create Folder
             </button>
-
           </div>
 
           {/* ERROR MESSAGE */}
@@ -255,7 +290,6 @@ function FoldersPage() {
           {/* SEARCH AND STATS */}
 
           <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-
             <div className="relative max-w-md flex-1">
               <Search
                 size={19}
@@ -277,28 +311,21 @@ function FoldersPage() {
               </span>{" "}
               {folders.length === 1 ? "Folder" : "Folders"}
             </div>
-
           </div>
 
           {/* FOLDER GRID */}
 
           {filteredFolders.length > 0 ? (
-
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-
               {filteredFolders.map((folder) => {
-
                 const count = noteCounts[folder.id] || 0;
 
                 return (
-
                   <div
                     key={folder.id}
                     className="group rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg"
                   >
-
                     <div className="flex items-start justify-between">
-
                       <div
                         className="rounded-2xl p-4"
                         style={{
@@ -310,7 +337,6 @@ function FoldersPage() {
                       </div>
 
                       <div className="relative flex gap-1">
-
                         <button
                           onClick={() => openEditModal(folder)}
                           title="Edit folder"
@@ -326,19 +352,15 @@ function FoldersPage() {
                         >
                           <Trash2 size={17} />
                         </button>
-
                       </div>
-
                     </div>
 
                     <div className="mt-5">
-
                       <h3 className="truncate text-lg font-bold text-[#17243D]">
                         {folder.name}
                       </h3>
 
                       <div className="mt-3 flex items-center justify-between">
-
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                           <FileText size={16} />
                           {count} {count === 1 ? "Note" : "Notes"}
@@ -359,22 +381,14 @@ function FoldersPage() {
                               ? "Conflict"
                               : "Pending sync"}
                         </span>
-
                       </div>
-
                     </div>
-
                   </div>
-
                 );
               })}
-
             </div>
-
           ) : (
-
             <div className="rounded-2xl border border-dashed border-[#17243D]/15 bg-[#FFFAF1] px-6 py-20 text-center">
-
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F47768]/10 text-[#F47768]">
                 {search ? (
                   <Search size={30} />
@@ -401,25 +415,17 @@ function FoldersPage() {
                   Create Your First Folder
                 </button>
               )}
-
             </div>
-
           )}
-
         </div>
-
       </main>
 
       {/* CREATE / EDIT MODAL */}
 
       {isModalOpen && (
-
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[#17243D]/50 p-4 backdrop-blur-sm">
-
           <div className="w-full max-w-md rounded-2xl bg-[#FFFAF1] p-6 shadow-2xl">
-
             <div className="mb-6 flex items-center justify-between">
-
               <div>
                 <h2 className="text-xl font-bold text-[#17243D]">
                   {editingFolder ? "Edit Folder" : "Create Folder"}
@@ -437,11 +443,9 @@ function FoldersPage() {
               >
                 <X size={21} />
               </button>
-
             </div>
 
             <form onSubmit={handleSaveFolder}>
-
               <label className="mb-2 block text-sm font-semibold text-[#17243D]">
                 Folder Name
               </label>
@@ -461,9 +465,7 @@ function FoldersPage() {
               </label>
 
               <div className="flex flex-wrap gap-3">
-
                 {folderColors.map((color) => (
-
                   <button
                     key={color}
                     type="button"
@@ -477,9 +479,7 @@ function FoldersPage() {
                     aria-label={`Choose ${color}`}
                     aria-pressed={folderColor === color}
                   />
-
                 ))}
-
               </div>
 
               {error && (
@@ -489,7 +489,6 @@ function FoldersPage() {
               )}
 
               <div className="mt-8 flex gap-3">
-
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -509,17 +508,11 @@ function FoldersPage() {
                       ? "Save Changes"
                       : "Create Folder"}
                 </button>
-
               </div>
-
             </form>
-
           </div>
-
         </div>
-
       )}
-
     </div>
   );
 }

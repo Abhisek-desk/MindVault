@@ -47,5 +47,12 @@
     "vite": "^8.3.5",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "workbox-build": {
+      "glob": "14.0.4"
+    },
+    "eslint": {},
+    "typescript-eslint": {}
   }
 }

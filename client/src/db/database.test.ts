@@ -288,7 +288,7 @@ describe("Offline synchronization queue", () => {
   });
 
   it("saves and retrieves the synchronization cursor", async () => {
-    const cursor = "test-sync-cursor-123";
+    const cursor = "507f1f77bcf86cd799439011";
 
     await saveSyncCursor(cursor);
 

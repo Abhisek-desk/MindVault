@@ -121,12 +121,12 @@ describe("Pull server changes", () => {
       success: true,
       count: 1,
       hasMore: false,
-      nextCursor: "cursor-001",
+      nextCursor: "507f1f77bcf86cd799439011",
       changes: [
         {
-          id: "server-change-001",
+          id: "507f1f77bcf86cd799439012",
           entityType: "note",
-          entityId: "remote-note-001",
+          entityId: "507f1f77bcf86cd799439013",
           operation: "create",
           data: {
             title: "Remote Note",
@@ -143,7 +143,7 @@ describe("Pull server changes", () => {
 
     await pullServerChanges();
 
-    const note = await db.notes.get("remote-note-001");
+    const note = await db.notes.get("507f1f77bcf86cd799439013");
 
     expect(note).toBeDefined();
     expect(note?.title).toBe("Remote Note");
@@ -157,7 +157,7 @@ describe("Pull server changes", () => {
       success: true,
       count: 0,
       hasMore: false,
-      nextCursor: "cursor-002",
+      nextCursor: "507f1f77bcf86cd799439014",
       changes: [],
     } as never);
 
@@ -165,7 +165,7 @@ describe("Pull server changes", () => {
 
     const metadata = await db.syncMeta.get("lastSyncCursor");
 
-    expect(metadata?.value).toBe("cursor-002");
+    expect(metadata?.value).toBe("507f1f77bcf86cd799439014");
   });
 
   it("detects conflicts when local changes already exist", async () => {
@@ -175,10 +175,10 @@ describe("Pull server changes", () => {
       success: true,
       count: 1,
       hasMore: false,
-      nextCursor: "cursor-003",
+      nextCursor: "507f1f77bcf86cd799439015",
       changes: [
         {
-          id: "server-change-003",
+          id: "507f1f77bcf86cd799439016",
           entityType: "note",
           entityId: note.id,
           operation: "update",

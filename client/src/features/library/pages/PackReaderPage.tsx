@@ -46,13 +46,17 @@ function PackReaderPage() {
         }
 
         if (!pack.contentBlob) {
-          throw new Error("Downloaded file is not available on this device.");
+          throw new Error(
+            "Downloaded file is not available on this device."
+          );
         }
 
         const MAX_PACK_SIZE = 50 * 1024 * 1024; // 50 MB
 
         if (pack.contentBlob.size > MAX_PACK_SIZE) {
-          throw new Error("Knowledge pack exceeds the maximum allowed size.");
+          throw new Error(
+            "Knowledge pack exceeds the maximum allowed size."
+          );
         }
 
         const zip = await JSZip.loadAsync(pack.contentBlob, {
@@ -61,13 +65,16 @@ function PackReaderPage() {
 
         const files = Object.values(zip.files)
           .filter(
-            (file) => !file.dir && /\.(md|markdown|txt)$/i.test(file.name),
+            (file) =>
+              !file.dir && /\.(md|markdown|txt)$/i.test(file.name)
           )
           .map((file) => file.name)
           .sort();
 
         if (files.length === 0) {
-          throw new Error("No readable Markdown or text documents found.");
+          throw new Error(
+            "No readable Markdown or text documents found."
+          );
         }
 
         const firstFile = zip.file(files[0]);
@@ -92,7 +99,7 @@ function PackReaderPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "Could not open this knowledge pack.",
+            : "Could not open this knowledge pack."
         );
       } finally {
         if (!cancelled) {
@@ -133,7 +140,11 @@ function PackReaderPage() {
 
       setContent(text);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open document.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Could not open document."
+      );
     } finally {
       setContentLoading(false);
     }
@@ -157,7 +168,9 @@ function PackReaderPage() {
               OFFLINE KNOWLEDGE READER
             </p>
 
-            <h1 className="text-lg font-bold">{title || "Knowledge Pack"}</h1>
+            <h1 className="text-lg font-bold">
+              {title || "Knowledge Pack"}
+            </h1>
           </div>
         </div>
       </header>
@@ -173,7 +186,7 @@ function PackReaderPage() {
 
             <p>Opening your knowledge pack...</p>
           </div>
-        ) : error && !zipRef.current ? (
+        ) : error && documents.length === 0 ? (
           /* PACK LOADING ERROR */
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
             <AlertCircle className="mb-3" />
@@ -230,12 +243,14 @@ function PackReaderPage() {
                 </h2>
               </div>
 
-              {error && zipRef.current && (
+              {/* DOCUMENT ERROR */}
+              {error && documents.length > 0 && (
                 <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                   {error}
                 </div>
               )}
 
+              {/* DOCUMENT LOADING */}
               {contentLoading ? (
                 <div className="py-12 text-center">
                   <Loader2
@@ -243,7 +258,9 @@ function PackReaderPage() {
                     className="mx-auto mb-3 animate-spin text-[#F47768]"
                   />
 
-                  <p className="text-sm">Loading document...</p>
+                  <p className="text-sm">
+                    Loading document...
+                  </p>
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-8 text-[#17243D]">

@@ -20,7 +20,7 @@ import DashboardHeader from "../../dashboard/components/DashboardHeader";
 import {
   getLocalConflicts,
   keepLocalVersion,
-  useServerVersion,
+  useServerVersion as applyServerVersion,
 } from "../../../db/conflict.db";
 
 import type { LocalConflict } from "../../../db/database";
@@ -34,6 +34,7 @@ function ConflictsPage() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
+  // LOAD CONFLICTS
   const loadConflicts = useCallback(async () => {
     try {
       setError("");
@@ -48,10 +49,36 @@ function ConflictsPage() {
     }
   }, []);
 
+  // INITIAL CONFLICT LOADING
   useEffect(() => {
-    void loadConflicts();
-  }, [loadConflicts]);
+    let cancelled = false;
 
+    const loadInitialConflicts = async () => {
+      try {
+        const result = await getLocalConflicts();
+
+        if (!cancelled) {
+          setConflicts(result);
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Unable to load synchronization conflicts.");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadInitialConflicts();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // KEEP LOCAL VERSION
   const handleKeepLocal = async (conflict: LocalConflict) => {
     const confirmed = window.confirm(
       "Keep your local version? It will be queued to synchronize with the server."
@@ -77,6 +104,7 @@ function ConflictsPage() {
     }
   };
 
+  // USE SERVER VERSION
   const handleUseServer = async (conflict: LocalConflict) => {
     const confirmed = window.confirm(
       "Use the server version? Your conflicting local changes will be discarded."
@@ -88,7 +116,7 @@ function ConflictsPage() {
       setResolvingId(conflict.id);
       setError("");
 
-      await useServerVersion(conflict.id);
+      await applyServerVersion(conflict.id);
 
       await loadConflicts();
     } catch (err) {
@@ -102,10 +130,12 @@ function ConflictsPage() {
     }
   };
 
+  // FORMAT DATE
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString();
   };
 
+  // GET ENTITY NAME
   const getEntityName = (conflict: LocalConflict) => {
     if (conflict.localData) {
       const data = conflict.localData;
@@ -136,7 +166,10 @@ function ConflictsPage() {
       : "Untitled folder";
   };
 
-  const getOperationLabel = (operation: LocalConflict["operation"]) => {
+  // GET OPERATION LABEL
+  const getOperationLabel = (
+    operation: LocalConflict["operation"]
+  ) => {
     switch (operation) {
       case "create":
         return "Created";
@@ -152,6 +185,7 @@ function ConflictsPage() {
     }
   };
 
+  // RENDER LOCAL / SERVER VERSION
   const renderVersion = (
     title: string,
     data: Record<string, unknown> | null,
@@ -203,7 +237,6 @@ function ConflictsPage() {
           className="mx-auto max-w-[1600px] space-y-8 p-5 md:p-8"
         >
           {/* PAGE HEADER */}
-
           <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
             <div>
               <div className="mb-2 flex items-center gap-2 text-sm font-medium text-[#F47768]">
@@ -240,7 +273,6 @@ function ConflictsPage() {
           </section>
 
           {/* SUMMARY */}
-
           <section className="rounded-2xl border border-[#F47768]/20 bg-[#F47768]/10 p-5">
             <div className="flex items-start gap-4">
               <div className="rounded-xl bg-white p-3 text-[#F47768]">
@@ -262,15 +294,13 @@ function ConflictsPage() {
           </section>
 
           {/* ERROR */}
-
           {error && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               {error}
             </div>
           )}
 
-          {/* LOADING */}
-
+          {/* LOADING / EMPTY STATE / CONFLICT LIST */}
           {isLoading ? (
             <div className="flex min-h-64 items-center justify-center">
               <Loader2
@@ -279,8 +309,6 @@ function ConflictsPage() {
               />
             </div>
           ) : conflicts.length === 0 ? (
-            /* EMPTY STATE */
-
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -300,8 +328,6 @@ function ConflictsPage() {
               </p>
             </motion.div>
           ) : (
-            /* CONFLICT LIST */
-
             <div className="space-y-6">
               {conflicts.map((conflict) => {
                 const isResolving = resolvingId === conflict.id;
@@ -314,7 +340,6 @@ function ConflictsPage() {
                     className="overflow-hidden rounded-2xl border border-[#17243D]/10 bg-[#FFFAF1] shadow-sm"
                   >
                     {/* CONFLICT TITLE */}
-
                     <div className="flex flex-col justify-between gap-4 border-b border-[#17243D]/10 p-5 sm:flex-row sm:items-center">
                       <div className="flex min-w-0 items-center gap-3">
                         <div className="rounded-xl bg-[#F8F1E5] p-3 text-[#17243D]">
@@ -343,7 +368,6 @@ function ConflictsPage() {
                     </div>
 
                     {/* CONFLICT DETAILS */}
-
                     <div className="space-y-5 p-5">
                       <p className="text-xs text-gray-500">
                         Detected: {formatDate(conflict.detectedAt)}
@@ -364,15 +388,19 @@ function ConflictsPage() {
                       </div>
 
                       {/* RESOLUTION BUTTONS */}
-
                       <div className="flex flex-col justify-end gap-3 border-t border-[#17243D]/10 pt-5 sm:flex-row">
                         <button
                           onClick={() => void handleKeepLocal(conflict)}
-                          disabled={isResolving || resolvingId !== null}
+                          disabled={
+                            isResolving || resolvingId !== null
+                          }
                           className="flex items-center justify-center gap-2 rounded-xl border border-[#17243D]/15 bg-white px-5 py-3 text-sm font-semibold text-[#17243D] transition hover:border-[#F47768] hover:bg-[#F8F1E5] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {isResolving ? (
-                            <Loader2 size={16} className="animate-spin" />
+                            <Loader2
+                              size={16}
+                              className="animate-spin"
+                            />
                           ) : (
                             <Laptop size={17} />
                           )}
@@ -382,11 +410,16 @@ function ConflictsPage() {
 
                         <button
                           onClick={() => void handleUseServer(conflict)}
-                          disabled={isResolving || resolvingId !== null}
+                          disabled={
+                            isResolving || resolvingId !== null
+                          }
                           className="flex items-center justify-center gap-2 rounded-xl bg-[#17243D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#263958] disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {isResolving ? (
-                            <Loader2 size={16} className="animate-spin" />
+                            <Loader2
+                              size={16}
+                              className="animate-spin"
+                            />
                           ) : (
                             <Cloud size={17} />
                           )}

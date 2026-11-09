@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { useNavigate } from "react-router-dom";
+
 import {
   BookOpen,
   Download,
@@ -8,7 +15,7 @@ import {
   RefreshCw,
   Trash2,
   HardDrive,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 
 import Sidebar from "../../../features/dashboard/components/Sidebar";
@@ -18,12 +25,10 @@ import {
   getKnowledgePacks,
   downloadKnowledgePack,
   removeDownloadedPack,
-  type KnowledgePack
+  type KnowledgePack,
 } from "../../../services/download.service";
 
-import {
-  getLocalPacks
-} from "../../../db/packs.db";
+import { getLocalPacks } from "../../../db/packs.db";
 
 import type { LocalPack } from "../../../db/database";
 
@@ -32,7 +37,7 @@ const categories = [
   "Programming",
   "Web Development",
   "Computer Science",
-  "Data Structures"
+  "Data Structures",
 ];
 
 const languages = ["All", "English", "Hindi"];
@@ -54,10 +59,16 @@ function LibraryPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const downloadedIds = new Set(localPacks.map((pack) => pack.id));
+  const downloadedIds = useMemo(
+    () => new Set(localPacks.map((pack) => pack.id)),
+    [localPacks],
+  );
 
+  // =====================================
   // LOAD KNOWLEDGE PACKS
-  const loadPacks = async () => {
+  // =====================================
+
+  const loadPacks = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -67,7 +78,7 @@ function LibraryPage() {
         category: category === "All" ? undefined : category,
         language: language === "All" ? undefined : language,
         page: 1,
-        limit: 50
+        limit: 50,
       });
 
       setPacks(response.packs);
@@ -75,32 +86,101 @@ function LibraryPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Could not load knowledge packs."
+          : "Could not load knowledge packs.",
       );
     } finally {
       setLoading(false);
     }
-  };
+  }, [search, category, language]);
 
+  // =====================================
   // LOAD LOCALLY DOWNLOADED PACKS
-  const loadLocalPacks = async () => {
+  // =====================================
+
+  const loadLocalPacks = useCallback(async () => {
     try {
       const savedPacks = await getLocalPacks();
       setLocalPacks(savedPacks);
     } catch {
       setError("Could not load your downloaded packs.");
     }
-  };
-
-  useEffect(() => {
-    void loadLocalPacks();
   }, []);
 
+  // =====================================
+  // INITIAL LOCAL PACK LOADING
+  // =====================================
+
   useEffect(() => {
-    void loadPacks();
+    let cancelled = false;
+
+    const loadInitialLocalPacks = async () => {
+      try {
+        const savedPacks = await getLocalPacks();
+
+        if (!cancelled) {
+          setLocalPacks(savedPacks);
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Could not load your downloaded packs.");
+        }
+      }
+    };
+
+    void loadInitialLocalPacks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // =====================================
+  // LOAD REMOTE KNOWLEDGE PACKS
+  // =====================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadInitialPacks = async () => {
+      try {
+        const response = await getKnowledgePacks({
+          search: search || undefined,
+          category: category === "All" ? undefined : category,
+          language: language === "All" ? undefined : language,
+          page: 1,
+          limit: 50,
+        });
+
+        if (!cancelled) {
+          setPacks(response.packs);
+          setError("");
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Could not load knowledge packs.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadInitialPacks();
+
+    return () => {
+      cancelled = true;
+    };
   }, [search, category, language]);
 
+  // =====================================
   // DOWNLOAD A PACK
+  // =====================================
+
   const handleDownload = async (pack: KnowledgePack) => {
     try {
       setDownloadingId(pack._id);
@@ -116,17 +196,20 @@ function LibraryPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Download failed."
+          : "Download failed.",
       );
     } finally {
       setDownloadingId(null);
     }
   };
 
+  // =====================================
   // DELETE A DOWNLOADED PACK
+  // =====================================
+
   const handleRemove = async (pack: LocalPack) => {
     const confirmed = window.confirm(
-      `Remove "${pack.title}" from your device?`
+      `Remove "${pack.title}" from your device?`,
     );
 
     if (!confirmed) return;
@@ -143,12 +226,15 @@ function LibraryPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Could not remove downloaded pack."
+          : "Could not remove downloaded pack.",
       );
     }
   };
 
+  // =====================================
   // FORMAT FILE SIZE
+  // =====================================
+
   const formatFileSize = (bytes: number) => {
     if (!bytes) return "Unknown size";
 
@@ -159,31 +245,30 @@ function LibraryPage() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // =====================================
   // REFRESH LIBRARY
+  // =====================================
+
   const refreshLibrary = async () => {
     await Promise.all([loadPacks(), loadLocalPacks()]);
   };
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5] text-[#17243D]">
-
       <Sidebar
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
 
       <main className="min-w-0 flex-1">
-
         <DashboardHeader
           onMenuClick={() => setSidebarOpen(true)}
         />
 
         <div className="mx-auto max-w-7xl space-y-8 px-5 py-8 md:px-8">
-
           {/* PAGE TITLE */}
 
           <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
-
             <div>
               <p className="mb-2 text-sm font-semibold text-[#F47768]">
                 KNOWLEDGE LIBRARY
@@ -205,13 +290,11 @@ function LibraryPage() {
               <RefreshCw size={17} />
               Refresh Library
             </button>
-
           </section>
 
           {/* STATISTICS */}
 
           <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-
             <div className="rounded-2xl bg-[#17243D] p-5 text-white">
               <BookOpen className="mb-4 text-[#F47768]" size={25} />
 
@@ -242,9 +325,10 @@ function LibraryPage() {
               <p className="text-3xl font-bold">
                 {formatFileSize(
                   localPacks.reduce(
-                    (total, pack) => total + (pack.fileSizeBytes || 0),
-                    0
-                  )
+                    (total, pack) =>
+                      total + (pack.fileSizeBytes || 0),
+                    0,
+                  ),
                 )}
               </p>
 
@@ -252,7 +336,6 @@ function LibraryPage() {
                 Downloaded File Size
               </p>
             </div>
-
           </section>
 
           {/* NOTIFICATIONS */}
@@ -274,9 +357,7 @@ function LibraryPage() {
           {/* FILTERS */}
 
           <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5">
-
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-
               <div className="relative">
                 <Search
                   size={19}
@@ -315,15 +396,12 @@ function LibraryPage() {
                   </option>
                 ))}
               </select>
-
             </div>
-
           </section>
 
           {/* AVAILABLE KNOWLEDGE PACKS */}
 
           <section>
-
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
@@ -367,9 +445,7 @@ function LibraryPage() {
                 </p>
               </div>
             ) : (
-
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-
                 {packs.map((pack) => {
                   const isDownloaded = downloadedIds.has(pack._id);
                   const isDownloading = downloadingId === pack._id;
@@ -379,9 +455,7 @@ function LibraryPage() {
                       key={pack._id}
                       className="flex flex-col rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
                     >
-
                       <div className="mb-5 flex items-start justify-between">
-
                         <div className="rounded-xl bg-[#F47768]/10 p-3 text-[#F47768]">
                           <BookOpen size={25} />
                         </div>
@@ -392,11 +466,9 @@ function LibraryPage() {
                             Downloaded
                           </span>
                         )}
-
                       </div>
 
                       <div className="flex-1">
-
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#F47768]">
                           {pack.category}
                         </p>
@@ -410,7 +482,6 @@ function LibraryPage() {
                         </p>
 
                         <div className="mt-5 flex flex-wrap gap-2">
-
                           <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
                             {pack.language}
                           </span>
@@ -418,13 +489,11 @@ function LibraryPage() {
                           <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
                             Version {pack.version}
                           </span>
-
                         </div>
 
                         <p className="mt-4 text-xs text-gray-400">
                           File size: {formatFileSize(pack.fileSizeBytes)}
                         </p>
-
                       </div>
 
                       <button
@@ -436,7 +505,6 @@ function LibraryPage() {
                             : "bg-[#17243D] text-white hover:bg-[#F47768] disabled:opacity-60"
                         }`}
                       >
-
                         {isDownloaded ? (
                           <>
                             <CheckCircle2 size={17} />
@@ -453,22 +521,17 @@ function LibraryPage() {
                             Download Pack
                           </>
                         )}
-
                       </button>
-
                     </article>
                   );
                 })}
-
               </div>
             )}
-
           </section>
 
           {/* DOWNLOADED KNOWLEDGE PACKS */}
 
           <section>
-
             <div className="mb-5">
               <h2 className="text-xl font-bold">
                 My Offline Library
@@ -481,7 +544,6 @@ function LibraryPage() {
 
             {localPacks.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-[#17243D]/20 bg-[#FFFAF1] p-10 text-center">
-
                 <HardDrive
                   size={35}
                   className="mx-auto mb-3 text-gray-400"
@@ -494,21 +556,15 @@ function LibraryPage() {
                 <p className="mt-2 text-sm text-gray-500">
                   Download a knowledge pack to access it without internet.
                 </p>
-
               </div>
             ) : (
-
               <div className="space-y-3">
-
                 {localPacks.map((pack) => (
-
                   <div
                     key={pack.id}
                     className="flex flex-col justify-between gap-4 rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 sm:flex-row sm:items-center"
                   >
-
                     <div className="flex items-center gap-4">
-
                       <div className="rounded-xl bg-green-100 p-3 text-green-700">
                         <BookOpen size={22} />
                       </div>
@@ -528,13 +584,11 @@ function LibraryPage() {
                           {new Date(pack.downloadedAt).toLocaleDateString()}
                         </p>
                       </div>
-
                     </div>
 
                     {/* PACK ACTIONS */}
 
                     <div className="flex flex-wrap gap-2">
-
                       <button
                         onClick={() => navigate(`/library/read/${pack.id}`)}
                         className="flex items-center justify-center gap-2 rounded-xl bg-[#17243D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#F47768]"
@@ -550,22 +604,14 @@ function LibraryPage() {
                         <Trash2 size={16} />
                         Remove
                       </button>
-
                     </div>
-
                   </div>
-
                 ))}
-
               </div>
             )}
-
           </section>
-
         </div>
-
       </main>
-
     </div>
   );
 }

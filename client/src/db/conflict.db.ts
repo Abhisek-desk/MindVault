@@ -11,10 +11,7 @@ import {
 // =====================================
 
 export const getLocalConflicts = async (): Promise<LocalConflict[]> => {
-  return db.conflicts
-    .orderBy("detectedAt")
-    .reverse()
-    .toArray();
+  return db.conflicts.orderBy("detectedAt").reverse().toArray();
 };
 
 // =====================================
@@ -41,9 +38,7 @@ const getServerVersion = (
     !Number.isInteger(version) ||
     version < 1
   ) {
-    throw new Error(
-      "Valid server version is missing from the conflict.",
-    );
+    throw new Error("Valid server version is missing from the conflict.");
   }
 
   return version;
@@ -65,9 +60,7 @@ const createSyncChange = (
     entityId,
     operation,
     clientMutationId: crypto.randomUUID(),
-    ...(expectedVersion !== undefined
-      ? { expectedVersion }
-      : {}),
+    ...(expectedVersion !== undefined ? { expectedVersion } : {}),
     ...(data !== undefined ? { data } : {}),
     createdAt: new Date().toISOString(),
     status: "pending",
@@ -78,9 +71,7 @@ const createSyncChange = (
 // KEEP MY LOCAL VERSION
 // =====================================
 
-export const keepLocalVersion = async (
-  conflictId: string,
-): Promise<void> => {
+export const keepLocalVersion = async (conflictId: string): Promise<void> => {
   await db.transaction(
     "rw",
     db.notes,
@@ -115,6 +106,14 @@ export const keepLocalVersion = async (
       if (entityType === "note") {
         if (localData) {
           const note = localData as unknown as LocalNote;
+          if (
+            note.id !== entityId ||
+            typeof note.title !== "string" ||
+            typeof note.content !== "string" ||
+            (note.folderId !== null && typeof note.folderId !== "string")
+          ) {
+            throw new Error("Invalid local note conflict data.");
+          }
 
           if (serverOperation === "delete") {
             const recreatedNote: LocalNote = {
@@ -251,9 +250,7 @@ export const keepLocalVersion = async (
 // USE SERVER VERSION
 // =====================================
 
-export const useServerVersion = async (
-  conflictId: string,
-): Promise<void> => {
+export const useServerVersion = async (conflictId: string): Promise<void> => {
   await db.transaction(
     "rw",
     db.notes,
@@ -267,12 +264,7 @@ export const useServerVersion = async (
         throw new Error("Conflict not found");
       }
 
-      const {
-        entityType,
-        entityId,
-        serverData,
-        operation,
-      } = conflict;
+      const { entityType, entityId, serverData, operation } = conflict;
 
       // Remove all queued local operations.
       await db.syncQueue
@@ -289,9 +281,7 @@ export const useServerVersion = async (
           await db.notes.delete(entityId);
         } else {
           if (!serverData) {
-            throw new Error(
-              "Server note data is missing",
-            );
+            throw new Error("Server note data is missing");
           }
 
           const existingNote = await db.notes.get(entityId);
@@ -305,9 +295,7 @@ export const useServerVersion = async (
                 : "Untitled",
 
             content:
-              typeof serverData.content === "string"
-                ? serverData.content
-                : "",
+              typeof serverData.content === "string" ? serverData.content : "",
 
             folderId:
               serverData.folderId === null
@@ -321,8 +309,7 @@ export const useServerVersion = async (
             createdAt:
               typeof serverData.createdAt === "string"
                 ? serverData.createdAt
-                : existingNote?.createdAt ??
-                  conflict.detectedAt,
+                : (existingNote?.createdAt ?? conflict.detectedAt),
 
             updatedAt:
               typeof serverData.updatedAt === "string"
@@ -345,9 +332,7 @@ export const useServerVersion = async (
           await db.folders.delete(entityId);
         } else {
           if (!serverData) {
-            throw new Error(
-              "Server folder data is missing",
-            );
+            throw new Error("Server folder data is missing");
           }
 
           const existingFolder = await db.folders.get(entityId);
@@ -370,8 +355,7 @@ export const useServerVersion = async (
             createdAt:
               typeof serverData.createdAt === "string"
                 ? serverData.createdAt
-                : existingFolder?.createdAt ??
-                  conflict.detectedAt,
+                : (existingFolder?.createdAt ?? conflict.detectedAt),
 
             updatedAt:
               typeof serverData.updatedAt === "string"

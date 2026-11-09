@@ -28,6 +28,7 @@ const folderSchema = new Schema<IFolder>(
     color: {
       type: String,
       default: "#F47768",
+      match: /^#[0-9A-Fa-f]{6}$/,
     },
 
     version: {

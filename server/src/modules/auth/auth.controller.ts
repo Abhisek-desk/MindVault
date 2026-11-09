@@ -1,14 +1,17 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { randomUUID, createHash, timingSafeEqual } from "crypto";
 
 import { User } from "../users/user.model";
-import {
-  registerSchema,
-  loginSchema
-} from "./auth.validation";
+import { registerSchema, loginSchema } from "./auth.validation";
 
-// GET ACCESS SECRET
+// ========================================
+// JWT CONFIGURATION
+// ========================================
+
+const JWT_ALGORITHM = "HS256" as const;
+
 const getAccessSecret = (): string => {
   const secret = process.env.JWT_ACCESS_SECRET;
 
@@ -19,7 +22,6 @@ const getAccessSecret = (): string => {
   return secret;
 };
 
-// GET REFRESH SECRET
 const getRefreshSecret = (): string => {
   const secret = process.env.JWT_REFRESH_SECRET;
 
@@ -30,56 +32,122 @@ const getRefreshSecret = (): string => {
   return secret;
 };
 
+// ========================================
+// REFRESH TOKEN HASHING
+// ========================================
+
+// SHA-256 hashes the entire refresh token.
+// Unlike bcrypt, SHA-256 does not truncate long JWTs.
+
+const hashRefreshToken = (token: string): string => {
+  return createHash("sha256")
+    .update(token, "utf8")
+    .digest("hex");
+};
+
+// Compare hashes using constant-time comparison.
+
+const verifyRefreshToken = (
+  token: string,
+  storedHash: string,
+): boolean => {
+  if (
+    typeof storedHash !== "string" ||
+    !/^[a-f0-9]{64}$/i.test(storedHash)
+  ) {
+    return false;
+  }
+
+  const incomingHash = Buffer.from(
+    hashRefreshToken(token),
+    "hex",
+  );
+
+  const existingHash = Buffer.from(
+    storedHash,
+    "hex",
+  );
+
+  return timingSafeEqual(incomingHash, existingHash);
+};
+
+// ========================================
 // COOKIE OPTIONS
+// ========================================
+
 const accessCookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV === "production",
   sameSite: "lax" as const,
-  path: "/api/v1"
+  path: "/api/v1",
 };
 
 const refreshCookieOptions = {
   ...accessCookieOptions,
-  path: "/api/v1/auth/refresh"
+  path: "/api/v1/auth/refresh",
 };
 
+// ========================================
 // CREATE TOKENS
+// ========================================
+
 const createTokens = (userId: string) => {
   const accessToken = jwt.sign(
-    { sub: userId },
+    {
+      sub: userId,
+    },
     getAccessSecret(),
-    { expiresIn: "15m" }
+    {
+      expiresIn: "15m",
+      algorithm: JWT_ALGORITHM,
+    },
   );
 
   const refreshToken = jwt.sign(
-    { sub: userId },
+    {
+      sub: userId,
+      jti: randomUUID(),
+    },
     getRefreshSecret(),
-    { expiresIn: "7d" }
+    {
+      expiresIn: "7d",
+      algorithm: JWT_ALGORITHM,
+    },
   );
 
-  return { accessToken, refreshToken };
+  return {
+    accessToken,
+    refreshToken,
+  };
 };
 
+// ========================================
 // SET AUTH COOKIES
+// ========================================
+
 const setAuthCookies = (
   res: Response,
   accessToken: string,
-  refreshToken: string
+  refreshToken: string,
 ) => {
   res.cookie("accessToken", accessToken, {
     ...accessCookieOptions,
-    maxAge: 15 * 60 * 1000
+    maxAge: 15 * 60 * 1000,
   });
 
   res.cookie("refreshToken", refreshToken, {
     ...refreshCookieOptions,
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
 
+// ========================================
 // CLEAR AUTH COOKIES
+// ========================================
+
 const clearAuthCookies = (res: Response) => {
   res.clearCookie("accessToken", accessCookieOptions);
+
   res.clearCookie("refreshToken", refreshCookieOptions);
 };
 
@@ -89,7 +157,7 @@ const clearAuthCookies = (res: Response) => {
 
 export const register = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
     const result = registerSchema.safeParse(req.body);
@@ -97,7 +165,7 @@ export const register = async (
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid registration details"
+        message: "Invalid registration details",
       });
     }
 
@@ -108,7 +176,7 @@ export const register = async (
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: "Email is already registered"
+        message: "Email is already registered",
       });
     }
 
@@ -117,14 +185,14 @@ export const register = async (
     const user = await User.create({
       name,
       email,
-      passwordHash
+      passwordHash,
     });
 
     const tokens = createTokens(user.id);
 
-    user.refreshTokenHash = await bcrypt.hash(
+    // Store SHA-256 hash of the refresh token.
+    user.refreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
-      12
     );
 
     await user.save();
@@ -132,7 +200,7 @@ export const register = async (
     setAuthCookies(
       res,
       tokens.accessToken,
-      tokens.refreshToken
+      tokens.refreshToken,
     );
 
     return res.status(201).json({
@@ -142,15 +210,14 @@ export const register = async (
         id: user.id,
         name: user.name,
         email: user.email,
-        preferredLanguage: user.preferredLanguage
-      }
+        preferredLanguage: user.preferredLanguage,
+      },
     });
-
   } catch (error: any) {
     if (error.code === 11000) {
       return res.status(409).json({
         success: false,
-        message: "Email is already registered"
+        message: "Email is already registered",
       });
     }
 
@@ -158,7 +225,7 @@ export const register = async (
 
     return res.status(500).json({
       success: false,
-      message: "Registration failed"
+      message: "Registration failed",
     });
   }
 };
@@ -169,7 +236,7 @@ export const register = async (
 
 export const login = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
     const result = loginSchema.safeParse(req.body);
@@ -177,39 +244,40 @@ export const login = async (
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid login details"
+        message: "Invalid login details",
       });
     }
 
     const { email, password } = result.data;
 
-    const user = await User.findOne({ email })
-      .select("+passwordHash +refreshTokenHash");
+    const user = await User.findOne({ email }).select(
+      "+passwordHash +refreshTokenHash",
+    );
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
 
     const isPasswordValid = await bcrypt.compare(
       password,
-      user.passwordHash
+      user.passwordHash,
     );
 
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Invalid email or password"
+        message: "Invalid email or password",
       });
     }
 
     const tokens = createTokens(user.id);
 
-    user.refreshTokenHash = await bcrypt.hash(
+    // Replace any previous refresh session.
+    user.refreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
-      12
     );
 
     await user.save();
@@ -217,7 +285,7 @@ export const login = async (
     setAuthCookies(
       res,
       tokens.accessToken,
-      tokens.refreshToken
+      tokens.refreshToken,
     );
 
     return res.json({
@@ -227,16 +295,15 @@ export const login = async (
         id: user.id,
         name: user.name,
         email: user.email,
-        preferredLanguage: user.preferredLanguage
-      }
+        preferredLanguage: user.preferredLanguage,
+      },
     });
-
   } catch (error) {
     console.error("Login error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Login failed"
+      message: "Login failed",
     });
   }
 };
@@ -247,87 +314,119 @@ export const login = async (
 
 export const refresh = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
-    const token = req.cookies.refreshToken;
+    const token = req.cookies?.refreshToken;
 
     if (!token) {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Refresh token missing"
+        message: "Refresh token missing",
       });
     }
 
-    // FIXED: Use getRefreshSecret()
     const decoded = jwt.verify(
       token,
-      getRefreshSecret()
+      getRefreshSecret(),
+      {
+        algorithms: [JWT_ALGORITHM],
+      },
     ) as jwt.JwtPayload;
 
-    if (!decoded.sub) {
+    if (typeof decoded.sub !== "string") {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Invalid refresh token"
+        message: "Invalid refresh token",
       });
     }
 
-    const user = await User.findById(decoded.sub)
-      .select("+refreshTokenHash");
+    const user = await User.findById(
+      decoded.sub,
+    ).select("+refreshTokenHash");
 
     if (!user || !user.refreshTokenHash) {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Invalid refresh session"
+        message: "Invalid refresh session",
       });
     }
 
-    const validToken = await bcrypt.compare(
-      token,
-      user.refreshTokenHash
-    );
+    const previousHash = user.refreshTokenHash;
 
-    if (!validToken) {
+    // Verify the complete refresh token.
+    if (!verifyRefreshToken(token, previousHash)) {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Refresh session expired"
+        message: "Refresh session expired",
       });
     }
 
     const tokens = createTokens(user.id);
 
-    user.refreshTokenHash = await bcrypt.hash(
+    const newRefreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
-      12
     );
 
-    await user.save();
+    // Atomic compare-and-swap.
+    // Only one concurrent request can rotate this token.
+    const rotationResult = await User.updateOne(
+      {
+        _id: user._id,
+        refreshTokenHash: previousHash,
+      },
+      {
+        $set: {
+          refreshTokenHash: newRefreshTokenHash,
+        },
+      },
+    );
+
+    if (rotationResult.modifiedCount !== 1) {
+      clearAuthCookies(res);
+
+      return res.status(401).json({
+        success: false,
+        message: "Refresh session has already been used",
+      });
+    }
 
     setAuthCookies(
       res,
       tokens.accessToken,
-      tokens.refreshToken
+      tokens.refreshToken,
     );
 
     return res.json({
       success: true,
-      message: "Session refreshed"
+      message: "Session refreshed",
     });
-
   } catch (error) {
     clearAuthCookies(res);
 
-    return res.status(401).json({
+    if (
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.TokenExpiredError
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: "Session expired",
+      });
+    }
+
+    console.error("Refresh error:", error);
+
+    return res.status(500).json({
       success: false,
-      message: "Session expired"
+      message: "Could not refresh session",
     });
   }
 };
@@ -338,7 +437,7 @@ export const refresh = async (
 
 export const getMe = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
     const user = await User.findById(req.userId);
@@ -346,7 +445,7 @@ export const getMe = async (
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: "User not found"
+        message: "User not found",
       });
     }
 
@@ -356,14 +455,13 @@ export const getMe = async (
         id: user.id,
         name: user.name,
         email: user.email,
-        preferredLanguage: user.preferredLanguage
-      }
+        preferredLanguage: user.preferredLanguage,
+      },
     });
-
-  } catch (error) {
+  } catch {
     return res.status(500).json({
       success: false,
-      message: "Could not load user"
+      message: "Could not load user",
     });
   }
 };
@@ -374,13 +472,19 @@ export const getMe = async (
 
 export const logout = async (
   req: Request,
-  res: Response
+  res: Response,
 ) => {
   try {
     if (req.userId) {
       await User.updateOne(
-        { _id: req.userId },
-        { $unset: { refreshTokenHash: 1 } }
+        {
+          _id: req.userId,
+        },
+        {
+          $unset: {
+            refreshTokenHash: 1,
+          },
+        },
       );
     }
 
@@ -388,15 +492,14 @@ export const logout = async (
 
     return res.json({
       success: true,
-      message: "Logged out successfully"
+      message: "Logged out successfully",
     });
-
-  } catch (error) {
+  } catch {
     clearAuthCookies(res);
 
     return res.status(500).json({
       success: false,
-      message: "Logout failed"
+      message: "Logout failed",
     });
   }
 };

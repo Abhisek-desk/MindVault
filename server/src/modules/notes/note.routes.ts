@@ -13,7 +13,7 @@ const router = Router();
 
 // All note routes require login
 router.use(protect);
-
+    
 router.post("/", createNote);
 router.get("/", getNotes);
 router.put("/:id", updateNote);

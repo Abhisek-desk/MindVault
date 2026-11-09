@@ -12,6 +12,12 @@ const generateId = (): string => {
     .join("");
 };
 
+const validateNoteId = (id: string): void => {
+  if (!/^[a-fA-F0-9]{24}$/.test(id)) {
+    throw new Error("Invalid note ID.");
+  }
+};
+
 // =====================================
 // CREATE NOTE LOCALLY
 // =====================================
@@ -88,6 +94,7 @@ export const getLocalNotes = async (): Promise<LocalNote[]> => {
 export const getLocalNoteById = async (
   id: string,
 ): Promise<LocalNote | undefined> => {
+  validateNoteId(id);
   return db.notes.get(id);
 };
 
@@ -99,6 +106,7 @@ export const updateLocalNote = async (
   id: string,
   updates: Partial<Pick<LocalNote, "title" | "content" | "folderId">>,
 ): Promise<LocalNote> => {
+  validateNoteId(id);
   return db.transaction("rw", db.notes, db.syncQueue, async () => {
     const existingNote = await db.notes.get(id);
 
@@ -206,6 +214,7 @@ export const updateLocalNote = async (
 // =====================================
 
 export const deleteLocalNote = async (id: string): Promise<void> => {
+  validateNoteId(id);
   await db.transaction("rw", db.notes, db.syncQueue, async () => {
     const existingNote = await db.notes.get(id);
 

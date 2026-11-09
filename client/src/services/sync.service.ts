@@ -44,6 +44,147 @@ interface PullResponse {
 }
 
 // =====================================
+// VALIDATE SERVER SYNC RESPONSES
+// =====================================
+
+const validatePullResponse = (response: PullResponse): void => {
+  if (
+    !response ||
+    response.success !== true ||
+    !Number.isInteger(response.count) ||
+    response.count < 0 ||
+    typeof response.hasMore !== "boolean" ||
+    !Array.isArray(response.changes)
+  ) {
+    throw new Error("Invalid synchronization response.");
+  }
+
+  if (response.count !== response.changes.length) {
+    throw new Error("Synchronization response count mismatch.");
+  }
+
+  if (
+    response.nextCursor !== null &&
+    (typeof response.nextCursor !== "string" ||
+      !/^[a-fA-F0-9]{24}$/.test(response.nextCursor))
+  ) {
+    throw new Error("Invalid synchronization cursor.");
+  }
+
+  for (const change of response.changes) {
+    if (
+      !change ||
+      typeof change.id !== "string" ||
+      !/^[a-fA-F0-9]{24}$/.test(change.id) ||
+      !["note", "folder"].includes(change.entityType) ||
+      !/^[a-fA-F0-9]{24}$/.test(change.entityId) ||
+      !["create", "update", "delete"].includes(change.operation) ||
+      typeof change.createdAt !== "string" ||
+      Number.isNaN(Date.parse(change.createdAt)) ||
+      (change.data !== undefined &&
+        (typeof change.data !== "object" ||
+          change.data === null ||
+          Array.isArray(change.data)))
+    ) {
+      throw new Error("Invalid server synchronization change.");
+    }
+  }
+};
+
+// =====================================
+// VALIDATE PUSH RESPONSE
+// =====================================
+
+const validatePushResponse = (
+  response: PushResponse,
+  expectedCount: number,
+): void => {
+  if (
+    !response ||
+    response.success !== true ||
+    !Number.isInteger(response.processed) ||
+    response.processed < 0 ||
+    !Number.isInteger(response.duplicates) ||
+    response.duplicates < 0 ||
+    response.processed + response.duplicates !== expectedCount
+  ) {
+    throw new Error("Invalid synchronization push response.");
+  }
+};
+
+// =====================================
+// VALIDATE OUTGOING SYNC CHANGES
+// =====================================
+
+const validateLocalChange = (change: LocalSyncChange): void => {
+  if (
+    !change ||
+    !Number.isSafeInteger(change.id) ||
+    change.id! < 1 ||
+    !["note", "folder"].includes(change.entityType) ||
+    typeof change.entityId !== "string" ||
+    !/^[a-fA-F0-9]{24}$/.test(change.entityId) ||
+    !["create", "update", "delete"].includes(change.operation) ||
+    typeof change.clientMutationId !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      change.clientMutationId,
+    ) ||
+    (change.expectedVersion !== undefined &&
+      (!Number.isInteger(change.expectedVersion) ||
+        change.expectedVersion < 1)) ||
+    ((change.operation === "update" || change.operation === "delete") &&
+      change.expectedVersion === undefined)
+  ) {
+    throw new Error("Invalid local synchronization change.");
+  }
+
+  if (change.data === undefined) {
+    return;
+  }
+
+  if (
+    typeof change.data !== "object" ||
+    change.data === null ||
+    Array.isArray(change.data)
+  ) {
+    throw new Error("Invalid synchronization payload data.");
+  }
+
+  const data = change.data as Record<string, unknown>;
+
+  if (change.entityType === "note") {
+    if (
+      (data.title !== undefined &&
+        (typeof data.title !== "string" ||
+          data.title.trim().length < 1 ||
+          data.title.trim().length > 200)) ||
+      (data.content !== undefined &&
+        (typeof data.content !== "string" || data.content.length > 20000)) ||
+      (data.folderId !== undefined &&
+        data.folderId !== null &&
+        (typeof data.folderId !== "string" ||
+          !/^[a-fA-F0-9]{24}$/.test(data.folderId)))
+    ) {
+      throw new Error("Invalid local note synchronization data.");
+    }
+  }
+
+  if (change.entityType === "folder") {
+    if (
+      (data.name !== undefined &&
+        (typeof data.name !== "string" ||
+          data.name.trim().length < 1 ||
+          data.name.trim().length > 50)) ||
+      (data.color !== undefined &&
+        (typeof data.color !== "string" ||
+          !/^#[0-9A-Fa-f]{6}$/.test(data.color)))
+    ) {
+      throw new Error("Invalid local folder synchronization data.");
+    }
+  }
+};
+
+// =====================================
 // PREVENT SIMULTANEOUS SYNC OPERATIONS
 // =====================================
 
@@ -53,9 +194,7 @@ let syncInProgress = false;
 // GET CURRENT ENTITY VERSION
 // =====================================
 
-const getEntityVersion = async (
-  change: LocalSyncChange,
-): Promise<number> => {
+const getEntityVersion = async (change: LocalSyncChange): Promise<number> => {
   if (change.expectedVersion !== undefined) {
     return change.expectedVersion;
   }
@@ -81,9 +220,7 @@ const getEntityVersion = async (
 // MARK ENTITY AS SYNCED
 // =====================================
 
-const markEntityAsSynced = async (
-  change: LocalSyncChange,
-): Promise<void> => {
+const markEntityAsSynced = async (change: LocalSyncChange): Promise<void> => {
   const remainingChanges = await db.syncQueue
     .where("[entityType+entityId]")
     .equals([change.entityType, change.entityId])
@@ -188,18 +325,32 @@ export const pushLocalChanges = async (): Promise<void> => {
     );
 
     const batch = eligibleChanges
-      .filter(
-        (change): change is LocalSyncChange => change !== null,
-      )
+      .filter((change): change is LocalSyncChange => change !== null)
       .slice(0, 50);
 
     if (batch.length === 0) {
       break;
     }
 
-    const validChanges = batch.filter(
-      (change) => change.id !== undefined,
-    );
+    const validChanges = batch.filter((change) => change.id !== undefined);
+
+    if (validChanges.length > 50) {
+      throw new Error("Synchronization batch exceeds the maximum size.");
+    }
+
+    const mutationIds = new Set<string>();
+
+    for (const change of validChanges) {
+      validateLocalChange(change);
+
+      const mutationId = change.clientMutationId.toLowerCase();
+
+      if (mutationIds.has(mutationId)) {
+        throw new Error("Duplicate mutation ID in synchronization batch.");
+      }
+
+      mutationIds.add(mutationId);
+    } 
 
     if (validChanges.length === 0) {
       break;
@@ -215,9 +366,7 @@ export const pushLocalChanges = async (): Promise<void> => {
               entityId: change.entityId,
               operation: change.operation,
               clientMutationId: change.clientMutationId,
-              ...(change.data !== undefined
-                ? { data: change.data }
-                : {}),
+              ...(change.data !== undefined ? { data: change.data } : {}),
             };
           }
 
@@ -229,9 +378,7 @@ export const pushLocalChanges = async (): Promise<void> => {
             operation: change.operation,
             clientMutationId: change.clientMutationId,
             expectedVersion,
-            ...(change.data !== undefined
-              ? { data: change.data }
-              : {}),
+            ...(change.data !== undefined ? { data: change.data } : {}),
           };
         }),
       );
@@ -242,25 +389,14 @@ export const pushLocalChanges = async (): Promise<void> => {
       }
 
       // Step 3: Upload changes to the server.
-      const response = await apiRequest<PushResponse>(
-        "/sync/push",
-        {
-          method: "POST",
-          body: {
-            changes: payloadChanges,
-          },
+      const response = await apiRequest<PushResponse>("/sync/push", {
+        method: "POST",
+        body: {
+          changes: payloadChanges,
         },
-      );
+      });
 
-      // Step 4: Verify server confirmation.
-      if (
-        response.processed + response.duplicates !==
-        validChanges.length
-      ) {
-        throw new Error(
-          "Unexpected synchronization response",
-        );
-      }
+      validatePushResponse(response, validChanges.length);
 
       // Step 5: Update versions and remove confirmed changes.
       await db.transaction(
@@ -280,14 +416,9 @@ export const pushLocalChanges = async (): Promise<void> => {
         },
       );
 
-      console.log(
-        `Successfully synchronized ${validChanges.length} changes.`,
-      );
+      console.log(`Successfully synchronized ${validChanges.length} changes.`);
     } catch (error) {
-      console.error(
-        "Push synchronization failed:",
-        error,
-      );
+      console.error("Push synchronization failed:", error);
 
       // Preserve changes for a future retry.
       for (const change of validChanges) {
@@ -322,11 +453,9 @@ const applyServerChanges = async (
           .equals([change.entityType, change.entityId])
           .count();
 
-        const conflictId =
-          `${change.entityType}:${change.entityId}`;
+        const conflictId = `${change.entityType}:${change.entityId}`;
 
-        const existingConflict =
-          await db.conflicts.get(conflictId);
+        const existingConflict = await db.conflicts.get(conflictId);
 
         // =================================
         // HANDLE CONFLICT
@@ -336,9 +465,7 @@ const applyServerChanges = async (
           let localData: Record<string, unknown> | null = null;
 
           if (change.entityType === "note") {
-            const localNote = await db.notes.get(
-              change.entityId,
-            );
+            const localNote = await db.notes.get(change.entityId);
 
             if (localNote) {
               localData = { ...localNote };
@@ -346,9 +473,7 @@ const applyServerChanges = async (
           }
 
           if (change.entityType === "folder") {
-            const localFolder = await db.folders.get(
-              change.entityId,
-            );
+            const localFolder = await db.folders.get(change.entityId);
 
             if (localFolder) {
               localData = { ...localFolder };
@@ -364,8 +489,7 @@ const applyServerChanges = async (
             serverData: change.data ?? null,
             serverChangeId: change.id,
             detectedAt:
-              existingConflict?.detectedAt ??
-              new Date().toISOString(),
+              existingConflict?.detectedAt ?? new Date().toISOString(),
           };
 
           await db.conflicts.put(conflict);
@@ -401,9 +525,7 @@ const applyServerChanges = async (
             continue;
           }
 
-          const existingNote = await db.notes.get(
-            change.entityId,
-          );
+          const existingNote = await db.notes.get(change.entityId);
 
           const note: LocalNote = {
             id: change.entityId,
@@ -411,29 +533,29 @@ const applyServerChanges = async (
             title:
               typeof data.title === "string"
                 ? data.title
-                : existingNote?.title ?? "Untitled",
+                : (existingNote?.title ?? "Untitled"),
 
             content:
               typeof data.content === "string"
                 ? data.content
-                : existingNote?.content ?? "",
+                : (existingNote?.content ?? ""),
 
             folderId:
               data.folderId === null
                 ? null
                 : typeof data.folderId === "string"
                   ? data.folderId
-                  : existingNote?.folderId ?? null,
+                  : (existingNote?.folderId ?? null),
 
             version:
               typeof data.version === "number"
                 ? data.version
-                : existingNote?.version ?? 1,
+                : (existingNote?.version ?? 1),
 
             createdAt:
               typeof data.createdAt === "string"
                 ? data.createdAt
-                : existingNote?.createdAt ?? change.createdAt,
+                : (existingNote?.createdAt ?? change.createdAt),
 
             updatedAt:
               typeof data.updatedAt === "string"
@@ -456,9 +578,7 @@ const applyServerChanges = async (
             continue;
           }
 
-          const existingFolder = await db.folders.get(
-            change.entityId,
-          );
+          const existingFolder = await db.folders.get(change.entityId);
 
           const folder: LocalFolder = {
             id: change.entityId,
@@ -466,22 +586,22 @@ const applyServerChanges = async (
             name:
               typeof data.name === "string"
                 ? data.name
-                : existingFolder?.name ?? "Untitled folder",
+                : (existingFolder?.name ?? "Untitled folder"),
 
             color:
               typeof data.color === "string"
                 ? data.color
-                : existingFolder?.color ?? "#F47768",
+                : (existingFolder?.color ?? "#F47768"),
 
             version:
               typeof data.version === "number"
                 ? data.version
-                : existingFolder?.version ?? 1,
+                : (existingFolder?.version ?? 1),
 
             createdAt:
               typeof data.createdAt === "string"
                 ? data.createdAt
-                : existingFolder?.createdAt ?? change.createdAt,
+                : (existingFolder?.createdAt ?? change.createdAt),
 
             updatedAt:
               typeof data.updatedAt === "string"
@@ -516,23 +636,26 @@ const applyServerChanges = async (
 export const pullServerChanges = async (): Promise<void> => {
   let cursor = await getSyncCursor();
 
+  if (
+    cursor !== null &&
+    (typeof cursor !== "string" || !/^[a-fA-F0-9]{24}$/.test(cursor))
+  ) {
+    throw new Error("Invalid stored synchronization cursor.");
+  }
+
   while (true) {
     const endpoint = cursor
       ? `/sync/pull?cursor=${encodeURIComponent(cursor)}&limit=100`
       : "/sync/pull?limit=100";
 
     const response = await apiRequest<PullResponse>(endpoint);
+    validatePullResponse(response);
 
     if (!response.success) {
-      throw new Error(
-        "Failed to retrieve server changes",
-      );
+      throw new Error("Failed to retrieve server changes");
     }
 
-    await applyServerChanges(
-      response.changes,
-      response.nextCursor,
-    );
+    await applyServerChanges(response.changes, response.nextCursor);
 
     if (response.nextCursor) {
       cursor = response.nextCursor;
@@ -543,9 +666,7 @@ export const pullServerChanges = async (): Promise<void> => {
     }
 
     if (!response.nextCursor) {
-      throw new Error(
-        "Server returned an invalid sync cursor",
-      );
+      throw new Error("Server returned an invalid sync cursor");
     }
   }
 };
@@ -560,9 +681,7 @@ export const synchronizeData = async (): Promise<void> => {
   }
 
   if (!navigator.onLine) {
-    console.log(
-      "Mind Vault is offline. Sync postponed.",
-    );
+    console.log("Mind Vault is offline. Sync postponed.");
 
     return;
   }
@@ -579,14 +698,9 @@ export const synchronizeData = async (): Promise<void> => {
     // SECOND: Push changes without unresolved conflicts.
     await pushLocalChanges();
 
-    console.log(
-      "Mind Vault synchronization completed.",
-    );
+    console.log("Mind Vault synchronization completed.");
   } catch (error) {
-    console.error(
-      "Mind Vault synchronization failed:",
-      error,
-    );
+    console.error("Mind Vault synchronization failed:", error);
 
     throw error;
   } finally {

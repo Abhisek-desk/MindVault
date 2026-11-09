@@ -2,7 +2,10 @@ import { Request, Response } from "express";
 
 import { AIConversation } from "./ai.model";
 import { generateAIResponse } from "./ai.service";
-import { retrieveRelevantNotes } from "./knowledge-retrieval.service";
+import {
+  retrieveRelevantNotes,
+  RetrievedNote
+} from "./knowledge-retrieval.service";
 
 import {
   conversationIdSchema,
@@ -10,7 +13,7 @@ import {
   sendMessageSchema,
 } from "./ai.validation";
 
-// Create a new conversation
+// Create a new conversation.
 export const createConversation = async (
   req: Request,
   res: Response,
@@ -58,7 +61,7 @@ export const createConversation = async (
   }
 };
 
-// Get all conversations belonging to the user
+// Get all conversations belonging to the user.
 export const getConversations = async (
   req: Request,
   res: Response,
@@ -93,7 +96,7 @@ export const getConversations = async (
   }
 };
 
-// Get one conversation with its messages
+// Get one conversation with its messages.
 export const getConversationById = async (
   req: Request,
   res: Response,
@@ -148,7 +151,7 @@ export const getConversationById = async (
   }
 };
 
-// Delete a conversation
+// Delete a conversation.
 export const deleteConversation = async (
   req: Request,
   res: Response,
@@ -203,7 +206,7 @@ export const deleteConversation = async (
   }
 };
 
-// Send a message and receive an AI response
+// Send a message and receive an AI response.
 export const sendMessage = async (
   req: Request,
   res: Response,
@@ -264,7 +267,19 @@ export const sendMessage = async (
     }));
 
     // Retrieve relevant notes belonging to this user.
-    const relevantNotes = await retrieveRelevantNotes(userId, userMessage);
+    let relevantNotes: RetrievedNote[] = [];
+
+    try {
+      relevantNotes = await retrieveRelevantNotes(
+        userId,
+        userMessage
+      );
+    } catch (error) {
+      console.error(
+        "Knowledge retrieval failed. Continuing without personal notes:",
+        error
+      );
+    }
 
     // Generate an AI response using personal knowledge.
     const aiResponse = await generateAIResponse(

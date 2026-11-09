@@ -7,8 +7,6 @@
     "dev": "nodemon --exec tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "test": "vitest run",
-    "test:watch": "vitest",
     "seed:packs": "tsx src/scripts/seed-knowledge-packs.ts",
     "backfill:embeddings": "tsx src/scripts/backfill-note-embeddings.ts",
     "backfill:versions": "tsx src/scripts/backfill-versions.ts",

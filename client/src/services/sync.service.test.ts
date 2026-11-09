@@ -1,28 +1,13 @@
 import "fake-indexeddb/auto";
 
-import {
-  afterAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { db } from "../db/database";
-import {
-  createLocalNote,
-  updateLocalNote,
-} from "../db/note.db";
-import {
-  getPendingChanges,
-} from "../db/sync.db";
+import { createLocalNote, updateLocalNote } from "../db/note.db";
+import { getPendingChanges, resetPendingChanges } from "../db/sync.db";
 
 import { apiRequest } from "./api";
-import {
-  pushLocalChanges,
-  pullServerChanges,
-} from "./sync.service";
+import { pushLocalChanges, pullServerChanges } from "./sync.service";
 
 // =====================================
 // MOCK API REQUESTS
@@ -84,10 +69,7 @@ describe("Push local changes", () => {
   });
 
   it("advances the local version after an update", async () => {
-    const note = await createLocalNote(
-      "Original Note",
-      "Original content",
-    );
+    const note = await createLocalNote("Original Note", "Original content");
 
     await db.syncQueue.clear();
 
@@ -116,18 +98,11 @@ describe("Push local changes", () => {
   });
 
   it("preserves failed changes for future retry", async () => {
-    await createLocalNote(
-      "Retry Note",
-      "This change must not be lost",
-    );
+    await createLocalNote("Retry Note", "This change must not be lost");
 
-    mockedApiRequest.mockRejectedValue(
-      new Error("Network unavailable"),
-    );
+    mockedApiRequest.mockRejectedValue(new Error("Network unavailable"));
 
-    await expect(
-      pushLocalChanges(),
-    ).rejects.toThrow("Network unavailable");
+    await expect(pushLocalChanges()).rejects.toThrow("Network unavailable");
 
     const changes = await db.syncQueue.toArray();
 
@@ -188,18 +163,13 @@ describe("Pull server changes", () => {
 
     await pullServerChanges();
 
-    const metadata = await db.syncMeta.get(
-      "lastSyncCursor",
-    );
+    const metadata = await db.syncMeta.get("lastSyncCursor");
 
     expect(metadata?.value).toBe("cursor-002");
   });
 
   it("detects conflicts when local changes already exist", async () => {
-    const note = await createLocalNote(
-      "My Local Note",
-      "Local content",
-    );
+    const note = await createLocalNote("My Local Note", "Local content");
 
     mockedApiRequest.mockResolvedValue({
       success: true,
@@ -225,9 +195,7 @@ describe("Pull server changes", () => {
 
     await pullServerChanges();
 
-    const conflict = await db.conflicts.get(
-      `note:${note.id}`,
-    );
+    const conflict = await db.conflicts.get(`note:${note.id}`);
 
     const savedNote = await db.notes.get(note.id);
 
@@ -239,5 +207,33 @@ describe("Pull server changes", () => {
 
     // Local queued changes must remain untouched.
     expect(await getPendingChanges()).toHaveLength(1);
+  });
+});
+describe("Interrupted synchronization recovery", () => {
+  it("restores processing and failed changes to pending", async () => {
+    await createLocalNote(
+      "Processing Note",
+      "Interrupted during synchronization",
+    );
+
+    await createLocalNote("Failed Note", "Failed during synchronization");
+
+    const changes = await db.syncQueue.toArray();
+
+    await db.syncQueue.update(changes[0].id!, {
+      status: "processing",
+    });
+
+    await db.syncQueue.update(changes[1].id!, {
+      status: "failed",
+    });
+
+    await resetPendingChanges();
+
+    const recovered = await getPendingChanges();
+
+    expect(recovered).toHaveLength(2);
+
+    expect(recovered.every((change) => change.status === "pending")).toBe(true);
   });
 });

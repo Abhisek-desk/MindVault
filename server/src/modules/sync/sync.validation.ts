@@ -20,7 +20,10 @@ const noteSyncSchema = z.object({
   data: z
     .object({
       title: z.string().trim().min(1).max(200).optional(),
-      content: z.string().optional(),
+      content: z
+        .string()
+        .max(20000, "Note content cannot exceed 20,000 characters")
+        .optional(),
       folderId: z
         .string()
         .regex(/^[0-9a-fA-F]{24}$/, "Invalid folder ID")
@@ -44,7 +47,13 @@ const folderSyncSchema = z.object({
   data: z
     .object({
       name: z.string().trim().min(1).max(50).optional(),
-      color: z.string().optional(),
+      color: z
+        .string()
+        .regex(
+          /^#[0-9A-Fa-f]{6}$/,
+          "Color must be a valid six-digit hexadecimal color",
+        )
+        .optional(),
     })
     .optional(),
 });

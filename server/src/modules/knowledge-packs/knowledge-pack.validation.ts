@@ -1,10 +1,14 @@
 import { z } from "zod";
 
 export const getKnowledgePacksSchema = z.object({
-  category: z.string().optional(),
-  language: z.string().optional(),
-  search: z.string().trim().optional(),
+  category: z.string().trim().max(100).optional(),
+
+  language: z.string().trim().max(20).optional(),
+
+  search: z.string().trim().max(200).optional(),
+
   page: z.coerce.number().int().min(1).default(1),
+
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 

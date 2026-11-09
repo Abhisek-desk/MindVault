@@ -1,8 +1,4 @@
-import {
-  db,
-  type LocalFolder,
-  type LocalSyncChange,
-} from "./database";
+import { db, type LocalFolder, type LocalSyncChange } from "./database";
 
 // =====================================
 // GENERATE MONGODB-COMPATIBLE ID
@@ -51,6 +47,14 @@ export const createLocalFolder = async (
 ): Promise<LocalFolder> => {
   if (!name.trim()) {
     throw new Error("Folder name is required");
+  }
+
+  if (name.trim().length > 50) {
+    throw new Error("Folder name cannot exceed 50 characters");
+  }
+
+  if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+    throw new Error("Color must be a valid six-digit hexadecimal color");
   }
 
   const now = new Date().toISOString();
@@ -119,8 +123,21 @@ export const updateLocalFolder = async (
       throw new Error("Folder not found");
     }
 
-    if (updates.name !== undefined && !updates.name.trim()) {
-      throw new Error("Folder name is required");
+    if (updates.name !== undefined) {
+      if (!updates.name.trim()) {
+        throw new Error("Folder name is required");
+      }
+
+      if (updates.name.trim().length > 50) {
+        throw new Error("Folder name cannot exceed 50 characters");
+      }
+    }
+
+    if (
+      updates.color !== undefined &&
+      !/^#[0-9A-Fa-f]{6}$/.test(updates.color)
+    ) {
+      throw new Error("Color must be a valid six-digit hexadecimal color");
     }
 
     const now = new Date().toISOString();
@@ -129,9 +146,7 @@ export const updateLocalFolder = async (
       ...existingFolder,
       ...updates,
       name:
-        updates.name !== undefined
-          ? updates.name.trim()
-          : existingFolder.name,
+        updates.name !== undefined ? updates.name.trim() : existingFolder.name,
       updatedAt: now,
       syncStatus: "pending",
     };
@@ -140,23 +155,17 @@ export const updateLocalFolder = async (
 
     const pendingCreate = changes.find(
       (change) =>
-        change.operation === "create" &&
-        change.status !== "processing",
+        change.operation === "create" && change.status !== "processing",
     );
 
     const pendingUpdate = changes.find(
       (change) =>
-        change.operation === "update" &&
-        change.status !== "processing",
+        change.operation === "update" && change.status !== "processing",
     );
 
     const updateData = {
-      ...(updates.name !== undefined
-        ? { name: updates.name.trim() }
-        : {}),
-      ...(updates.color !== undefined
-        ? { color: updates.color }
-        : {}),
+      ...(updates.name !== undefined ? { name: updates.name.trim() } : {}),
+      ...(updates.color !== undefined ? { color: updates.color } : {}),
     };
 
     // If creation has not started syncing, merge edits into creation.
@@ -168,10 +177,7 @@ export const updateLocalFolder = async (
         },
         status: "pending",
       });
-    } else if (
-      pendingUpdate &&
-      pendingUpdate.id !== undefined
-    ) {
+    } else if (pendingUpdate && pendingUpdate.id !== undefined) {
       // Merge into an existing pending update.
       await db.syncQueue.update(pendingUpdate.id, {
         data: {
@@ -206,9 +212,7 @@ export const updateLocalFolder = async (
 // DELETE FOLDER LOCALLY
 // =====================================
 
-export const deleteLocalFolder = async (
-  id: string,
-): Promise<void> => {
+export const deleteLocalFolder = async (id: string): Promise<void> => {
   await db.transaction("rw", db.folders, db.syncQueue, async () => {
     const existingFolder = await db.folders.get(id);
 
@@ -220,8 +224,7 @@ export const deleteLocalFolder = async (
 
     const pendingCreate = changes.find(
       (change) =>
-        change.operation === "create" &&
-        change.status !== "processing",
+        change.operation === "create" && change.status !== "processing",
     );
 
     // If creation has not started syncing, cancel it entirely.
@@ -243,8 +246,7 @@ export const deleteLocalFolder = async (
     const pendingChanges = changes
       .filter(
         (change) =>
-          change.status !== "processing" &&
-          change.operation !== "create",
+          change.status !== "processing" && change.operation !== "create",
       )
       .map((change) => change.id)
       .filter((changeId): changeId is number => changeId !== undefined);

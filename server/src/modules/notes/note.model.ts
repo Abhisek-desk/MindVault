@@ -35,6 +35,7 @@ const noteSchema = new Schema<INote>(
     content: {
       type: String,
       default: "",
+      maxlength: [20000, "Note content cannot exceed 20,000 characters"],
     },
 
     embedding: {

@@ -1,8 +1,4 @@
-import {
-  db,
-  type LocalNote,
-  type LocalSyncChange,
-} from "./database";
+import { db, type LocalNote, type LocalSyncChange } from "./database";
 
 // =====================================
 // GENERATE MONGODB-COMPATIBLE ID
@@ -27,6 +23,18 @@ export const createLocalNote = async (
 ): Promise<LocalNote> => {
   if (!title.trim()) {
     throw new Error("Note title is required");
+  }
+
+  if (title.trim().length > 200) {
+    throw new Error("Note title cannot exceed 200 characters");
+  }
+
+  if (typeof content !== "string" || content.length > 20000) {
+    throw new Error("Note content cannot exceed 20,000 characters");
+  }
+
+  if (folderId !== null && !/^[0-9a-fA-F]{24}$/.test(folderId)) {
+    throw new Error("Invalid folder ID");
   }
 
   const now = new Date().toISOString();
@@ -98,8 +106,29 @@ export const updateLocalNote = async (
       throw new Error("Note not found");
     }
 
-    if (updates.title !== undefined && !updates.title.trim()) {
-      throw new Error("Note title is required");
+    if (updates.title !== undefined) {
+      if (!updates.title.trim()) {
+        throw new Error("Note title is required");
+      }
+
+      if (updates.title.trim().length > 200) {
+        throw new Error("Note title cannot exceed 200 characters");
+      }
+    }
+
+    if (
+      updates.content !== undefined &&
+      (typeof updates.content !== "string" || updates.content.length > 20000)
+    ) {
+      throw new Error("Note content cannot exceed 20,000 characters");
+    }
+
+    if (
+      updates.folderId !== undefined &&
+      updates.folderId !== null &&
+      !/^[0-9a-fA-F]{24}$/.test(updates.folderId)
+    ) {
+      throw new Error("Invalid folder ID");
     }
 
     const now = new Date().toISOString();
@@ -108,9 +137,7 @@ export const updateLocalNote = async (
       ...existingNote,
       ...updates,
       title:
-        updates.title !== undefined
-          ? updates.title.trim()
-          : existingNote.title,
+        updates.title !== undefined ? updates.title.trim() : existingNote.title,
       updatedAt: now,
       syncStatus: "pending",
     };
@@ -122,21 +149,17 @@ export const updateLocalNote = async (
 
     const pendingCreate = queuedChanges.find(
       (change) =>
-        change.operation === "create" &&
-        change.status !== "processing",
+        change.operation === "create" && change.status !== "processing",
     );
 
     const pendingUpdate = queuedChanges.find(
       (change) =>
-        change.operation === "update" &&
-        change.status !== "processing",
+        change.operation === "update" && change.status !== "processing",
     );
 
     const updateData: Record<string, unknown> = {
       ...updates,
-      ...(updates.title !== undefined
-        ? { title: updates.title.trim() }
-        : {}),
+      ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
     };
 
     if (pendingCreate) {
@@ -197,8 +220,7 @@ export const deleteLocalNote = async (id: string): Promise<void> => {
 
     const pendingCreate = queuedChanges.find(
       (change) =>
-        change.operation === "create" &&
-        change.status !== "processing",
+        change.operation === "create" && change.status !== "processing",
     );
 
     // If the note was never synced, remove it and its queued changes.
@@ -220,8 +242,7 @@ export const deleteLocalNote = async (id: string): Promise<void> => {
       queuedChanges
         .filter(
           (change) =>
-            change.operation === "update" &&
-            change.status !== "processing",
+            change.operation === "update" && change.status !== "processing",
         )
         .map((change) => change.id!),
     );

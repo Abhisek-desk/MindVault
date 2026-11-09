@@ -41,10 +41,14 @@ export const createNote = async (
       return;
     }
 
-    if (content !== undefined && typeof content !== "string") {
+    if (
+      content !== undefined &&
+      (typeof content !== "string" || content.length > 20000)
+    ) {
       res.status(400).json({
         success: false,
-        message: "Note content must be text",
+        message:
+          "Note content must be text and cannot exceed 20,000 characters",
       });
       return;
     }
@@ -62,9 +66,7 @@ export const createNote = async (
     let embedding: number[] | undefined;
 
     try {
-      embedding = await generateEmbedding(
-        `${title.trim()}\n${content ?? ""}`,
-      );
+      embedding = await generateEmbedding(`${title.trim()}\n${content ?? ""}`);
     } catch (error) {
       console.error("Note embedding generation failed:", error);
     }
@@ -159,10 +161,7 @@ export const createNote = async (
 // GET NOTES
 // ========================================
 
-export const getNotes = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const getNotes = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.userId;
 
@@ -232,12 +231,7 @@ export const updateNote = async (
     const userId = req.userId;
     const { id } = req.params;
 
-    const {
-      title,
-      content,
-      folderId,
-      expectedVersion,
-    } = req.body;
+    const { title, content, folderId, expectedVersion } = req.body;
 
     if (!userId) {
       res.status(401).json({
@@ -255,10 +249,7 @@ export const updateNote = async (
       return;
     }
 
-    if (
-      !Number.isInteger(expectedVersion) ||
-      expectedVersion < 1
-    ) {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
       res.status(400).json({
         success: false,
         message: "A valid expectedVersion is required",
@@ -345,10 +336,7 @@ export const updateNote = async (
       return;
     }
 
-    if (
-      updates.title !== undefined ||
-      updates.content !== undefined
-    ) {
+    if (updates.title !== undefined || updates.content !== undefined) {
       const finalTitle = updates.title ?? existingNote.title;
       const finalContent = updates.content ?? existingNote.content;
 
@@ -357,10 +345,7 @@ export const updateNote = async (
           `${finalTitle}\n${finalContent}`,
         );
       } catch (error) {
-        console.error(
-          "Updated note embedding generation failed:",
-          error,
-        );
+        console.error("Updated note embedding generation failed:", error);
       }
     }
 
@@ -385,14 +370,11 @@ export const updateNote = async (
       const newFolderId =
         targetFolderId === undefined
           ? oldFolderId
-          : targetFolderId?.toString() ?? null;
+          : (targetFolderId?.toString() ?? null);
 
       // Only coordinate folders when membership changes.
       if (oldFolderId !== newFolderId) {
-        const folderIds = [
-          oldFolderId,
-          newFolderId,
-        ]
+        const folderIds = [oldFolderId, newFolderId]
           .filter((value): value is string => value !== null)
           .sort();
 
@@ -471,8 +453,7 @@ export const updateNote = async (
       note: updatedNote,
     });
   } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : "";
+    const errorMessage = error instanceof Error ? error.message : "";
 
     if (
       errorMessage === "NOTE_NOT_FOUND" ||
@@ -548,10 +529,7 @@ export const deleteNote = async (
     }
 
     // Validate expected version.
-    if (
-      !Number.isInteger(expectedVersion) ||
-      expectedVersion < 1
-    ) {
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 1) {
       res.status(400).json({
         success: false,
         message: "A valid expectedVersion is required",

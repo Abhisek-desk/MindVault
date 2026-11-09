@@ -35,7 +35,7 @@ const isAbortError = (error: unknown): boolean =>
 
 export async function apiRequest<T>(
   endpoint: string,
-  options: ApiOptions = {}
+  options: ApiOptions = {},
 ): Promise<T> {
   // VALIDATE API ENDPOINT
   if (
@@ -50,9 +50,7 @@ export async function apiRequest<T>(
   // VALIDATE HTTP METHOD
   const method = options.method ?? "GET";
 
-  if (
-    !ALLOWED_METHODS.includes(method)
-  ) {
+  if (!ALLOWED_METHODS.includes(method)) {
     throw new ApiError("Unsupported HTTP method.", 0);
   }
 
@@ -60,7 +58,7 @@ export async function apiRequest<T>(
   if (method === "GET" && options.body !== undefined) {
     throw new ApiError(
       "GET requests cannot contain a request body.",
-      0
+      0,
     );
   }
 
@@ -94,7 +92,7 @@ export async function apiRequest<T>(
 
   const timeout = window.setTimeout(
     () => controller.abort(),
-    timeoutMs
+    timeoutMs,
   );
 
   try {
@@ -105,6 +103,7 @@ export async function apiRequest<T>(
       response = await fetch(`${API_URL}${endpoint}`, {
         method,
         credentials: "include",
+        redirect: "error",
         headers: {
           Accept: "application/json",
           ...(requestBody !== undefined
@@ -118,23 +117,44 @@ export async function apiRequest<T>(
       if (isAbortError(error)) {
         throw new ApiError(
           "The request timed out. Please try again.",
-          0
+          0,
         );
       }
 
       throw new ApiError(
         "Unable to connect to the server. Check your internet connection.",
-        0
+        0,
       );
     }
 
     // HANDLE EMPTY RESPONSES
     if (response.status === 204) {
+      return undefined as T;
+    }
+
+    // VALIDATE RESPONSE CONTENT TYPE
+    const contentType = response.headers
+      .get("content-type")
+      ?.split(";")[0]
+      .trim()
+      .toLowerCase();
+
+    const isJsonResponse =
+      contentType === "application/json" ||
+      contentType?.endsWith("+json") === true;
+
+    if (!isJsonResponse) {
       if (!response.ok) {
-        throw new ApiError("Something went wrong.", response.status);
+        throw new ApiError(
+          "Something went wrong.",
+          response.status,
+        );
       }
 
-      return undefined as T;
+      throw new ApiError(
+        "The server returned an invalid response.",
+        response.status,
+      );
     }
 
     // PARSE RESPONSE
@@ -146,14 +166,14 @@ export async function apiRequest<T>(
       if (isAbortError(error)) {
         throw new ApiError(
           "The request timed out. Please try again.",
-          0
+          0,
         );
       }
 
       if (response.ok) {
         throw new ApiError(
           "The server returned an invalid response.",
-          response.status
+          response.status,
         );
       }
 
@@ -185,7 +205,7 @@ export async function apiRequest<T>(
 
     return data as T;
   } finally {
-    // Keep timeout active until the entire response is processed.
+    // KEEP TIMEOUT ACTIVE UNTIL RESPONSE PROCESSING FINISHES
     window.clearTimeout(timeout);
   }
 }

@@ -10,8 +10,10 @@ export const useAutoSync = (): void => {
 
       try {
         await synchronizeData();
-      } catch (error) {
-        console.error("Automatic sync failed:", error);
+      } catch {
+        if (import.meta.env.DEV) {
+          console.error("Automatic synchronization failed.");
+        }
       }
     };
 

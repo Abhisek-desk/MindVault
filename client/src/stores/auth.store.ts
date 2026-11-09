@@ -17,8 +17,10 @@ const AUTH_CACHE_KEY = "mindvault_offline_user";
 function saveCachedUser(user: AuthUser): void {
   try {
     localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(user));
-  } catch (error) {
-    console.error("Could not save offline profile:", error);
+  } catch {
+    if (import.meta.env.DEV) {
+      console.error("Could not save offline profile.");
+    }
   }
 }
 
@@ -57,8 +59,10 @@ function getCachedUser(): AuthUser | null {
 function clearCachedUser(): void {
   try {
     localStorage.removeItem(AUTH_CACHE_KEY);
-  } catch (error) {
-    console.error("Could not clear offline profile:", error);
+  } catch {
+    if (import.meta.env.DEV) {
+      console.error("Could not clear offline profile.");
+    }
   }
 }
 
@@ -109,8 +113,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (navigator.onLine) {
         await logoutUser();
       }
-    } catch (error) {
-      console.error("Server logout failed:", error);
+    } catch {
+      if (import.meta.env.DEV) {
+        console.error("Server logout failed.");
+      }
     } finally {
       clearCachedUser();
 

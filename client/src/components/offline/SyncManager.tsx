@@ -8,20 +8,30 @@ async function checkInternetConnection(): Promise<boolean> {
     return false;
   }
 
-  try {
-    const response = await fetch(
-      "https://www.gstatic.com/generate_204",
-      {
-        method: "GET",
-        mode: "no-cors",
-        cache: "no-store",
-        signal: AbortSignal.timeout(4000),
-      }
-    );
+  const controller = new AbortController();
 
-    return response.type === "opaque" || response.ok;
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    4000
+  );
+
+  try {
+    const response = await fetch("/api/v1/health", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    return response.ok;
   } catch {
     return false;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -68,9 +78,11 @@ function SyncManager() {
           wasOnline = true;
           lastSyncAttempt = now;
 
-          console.log(
-            "Internet restored. Starting synchronization."
-          );
+          if (import.meta.env.DEV) {
+            console.log(
+              "Internet restored. Starting synchronization."
+            );
+          }
 
           await syncNow();
           return;
@@ -85,9 +97,11 @@ function SyncManager() {
         ) {
           lastSyncAttempt = now;
 
-          console.log(
-            "Retrying failed synchronization."
-          );
+          if (import.meta.env.DEV) {
+            console.log(
+              "Retrying failed synchronization."
+            );
+          }
 
           await syncNow();
         }

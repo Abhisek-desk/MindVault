@@ -23,36 +23,30 @@ async function checkInternetConnection(): Promise<boolean> {
     return false;
   }
 
-  let timeoutId: number | undefined;
+  const controller = new AbortController();
+
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    4000
+  );
 
   try {
-    const connectionCheck = fetch(
-      "https://www.gstatic.com/generate_204",
-      {
-        method: "GET",
-        mode: "no-cors",
-        cache: "no-store"
-      }
-    )
-      .then(() => true)
-      .catch(() => false);
-
-    const timeoutCheck = new Promise<boolean>((resolve) => {
-      timeoutId = window.setTimeout(() => {
-        resolve(false);
-      }, 4000);
+    const response = await fetch("/api/v1/health", {
+      method: "GET",
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+      },
+      signal: controller.signal,
     });
 
-    return await Promise.race([
-      connectionCheck,
-      timeoutCheck
-    ]);
+    return response.ok;
   } catch {
     return false;
   } finally {
-    if (timeoutId !== undefined) {
-      window.clearTimeout(timeoutId);
-    }
+    window.clearTimeout(timeout);
   }
 }
 

@@ -5,7 +5,7 @@ import {
   BookOpen,
   FileText,
   Loader2,
-  AlertCircle
+  AlertCircle,
 } from "lucide-react";
 import JSZip from "jszip";
 
@@ -42,40 +42,38 @@ function PackReaderPage() {
         const pack = await getLocalPackById(packId);
 
         if (!pack) {
-          throw new Error(
-            "This knowledge pack is not downloaded."
-          );
+          throw new Error("This knowledge pack is not downloaded.");
         }
 
         if (!pack.contentBlob) {
-          throw new Error(
-            "Downloaded file is not available on this device."
-          );
+          throw new Error("Downloaded file is not available on this device.");
         }
 
-        const zip = await JSZip.loadAsync(pack.contentBlob);
+        const MAX_PACK_SIZE = 50 * 1024 * 1024; // 50 MB
+
+        if (pack.contentBlob.size > MAX_PACK_SIZE) {
+          throw new Error("Knowledge pack exceeds the maximum allowed size.");
+        }
+
+        const zip = await JSZip.loadAsync(pack.contentBlob, {
+          checkCRC32: true,
+        });
 
         const files = Object.values(zip.files)
           .filter(
-            (file) =>
-              !file.dir &&
-              /\.(md|markdown|txt)$/i.test(file.name)
+            (file) => !file.dir && /\.(md|markdown|txt)$/i.test(file.name),
           )
           .map((file) => file.name)
           .sort();
 
         if (files.length === 0) {
-          throw new Error(
-            "No readable Markdown or text documents found."
-          );
+          throw new Error("No readable Markdown or text documents found.");
         }
 
         const firstFile = zip.file(files[0]);
 
         if (!firstFile) {
-          throw new Error(
-            "The first document could not be opened."
-          );
+          throw new Error("The first document could not be opened.");
         }
 
         const firstContent = await firstFile.async("string");
@@ -94,7 +92,7 @@ function PackReaderPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "Could not open this knowledge pack."
+            : "Could not open this knowledge pack.",
         );
       } finally {
         if (!cancelled) {
@@ -117,9 +115,7 @@ function PackReaderPage() {
       const zip = zipRef.current;
 
       if (!zip) {
-        throw new Error(
-          "Knowledge pack is not loaded."
-        );
+        throw new Error("Knowledge pack is not loaded.");
       }
 
       setSelectedDocument(fileName);
@@ -130,20 +126,14 @@ function PackReaderPage() {
       const file = zip.file(fileName);
 
       if (!file) {
-        throw new Error(
-          "Document could not be found."
-        );
+        throw new Error("Document could not be found.");
       }
 
       const text = await file.async("string");
 
       setContent(text);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not open document."
-      );
+      setError(err instanceof Error ? err.message : "Could not open document.");
     } finally {
       setContentLoading(false);
     }
@@ -151,11 +141,9 @@ function PackReaderPage() {
 
   return (
     <div className="min-h-screen bg-[#F8F1E5] text-[#17243D]">
-
       {/* HEADER */}
       <header className="sticky top-0 z-10 border-b border-[#17243D]/10 bg-[#FFFAF1] px-5 py-4">
         <div className="mx-auto flex max-w-7xl items-center gap-4">
-
           <button
             onClick={() => navigate("/library")}
             className="rounded-xl border border-[#17243D]/10 p-2 transition hover:bg-[#F8F1E5]"
@@ -169,32 +157,25 @@ function PackReaderPage() {
               OFFLINE KNOWLEDGE READER
             </p>
 
-            <h1 className="text-lg font-bold">
-              {title || "Knowledge Pack"}
-            </h1>
+            <h1 className="text-lg font-bold">{title || "Knowledge Pack"}</h1>
           </div>
-
         </div>
       </header>
 
       <main className="mx-auto max-w-7xl px-5 py-8">
-
         {/* INITIAL LOADING */}
         {loading ? (
           <div className="rounded-2xl bg-[#FFFAF1] p-12 text-center">
-
             <Loader2
               size={30}
               className="mx-auto mb-3 animate-spin text-[#F47768]"
             />
 
             <p>Opening your knowledge pack...</p>
-
           </div>
         ) : error && !zipRef.current ? (
           /* PACK LOADING ERROR */
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-
             <AlertCircle className="mb-3" />
 
             {error}
@@ -205,29 +186,18 @@ function PackReaderPage() {
             >
               Return to Library
             </button>
-
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-
             {/* DOCUMENT SIDEBAR */}
             <aside className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 lg:col-span-1">
-
               <div className="mb-5 flex items-center gap-2">
+                <BookOpen className="text-[#F47768]" size={21} />
 
-                <BookOpen
-                  className="text-[#F47768]"
-                  size={21}
-                />
-
-                <h2 className="font-bold">
-                  Contents
-                </h2>
-
+                <h2 className="font-bold">Contents</h2>
               </div>
 
               <div className="space-y-2">
-
                 {documents.map((document) => (
                   <button
                     key={document}
@@ -238,28 +208,19 @@ function PackReaderPage() {
                         : "hover:bg-[#F8F1E5]"
                     }`}
                   >
-
-                    <FileText
-                      size={17}
-                      className="shrink-0"
-                    />
+                    <FileText size={17} className="shrink-0" />
 
                     <span className="break-all">
                       {document.split("/").pop()}
                     </span>
-
                   </button>
                 ))}
-
               </div>
-
             </aside>
 
             {/* DOCUMENT CONTENT */}
             <section className="min-h-[500px] rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-6 sm:p-8 lg:col-span-3">
-
               <div className="mb-6 border-b border-[#17243D]/10 pb-4">
-
                 <p className="text-xs font-semibold uppercase tracking-wide text-[#F47768]">
                   Currently Reading
                 </p>
@@ -267,7 +228,6 @@ function PackReaderPage() {
                 <h2 className="mt-2 break-all text-xl font-bold">
                   {selectedDocument.split("/").pop()}
                 </h2>
-
               </div>
 
               {error && zipRef.current && (
@@ -278,30 +238,22 @@ function PackReaderPage() {
 
               {contentLoading ? (
                 <div className="py-12 text-center">
-
                   <Loader2
                     size={28}
                     className="mx-auto mb-3 animate-spin text-[#F47768]"
                   />
 
-                  <p className="text-sm">
-                    Loading document...
-                  </p>
-
+                  <p className="text-sm">Loading document...</p>
                 </div>
               ) : (
                 <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-8 text-[#17243D]">
                   {content}
                 </pre>
               )}
-
             </section>
-
           </div>
         )}
-
       </main>
-
     </div>
   );
 }

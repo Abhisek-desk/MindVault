@@ -673,35 +673,72 @@ export const pullServerChanges = async (): Promise<void> => {
 
 // =====================================
 // COMPLETE SYNCHRONIZATION
+// WITH CROSS-TAB LOCKING
 // =====================================
 
+const performSynchronization = async (): Promise<void> => {
+  if (!navigator.onLine) {
+    console.log("Mind Vault is offline. Sync postponed.");
+    return;
+  }
+
+  // Retry changes interrupted by an earlier session.
+  await resetPendingChanges();
+
+  if (!navigator.onLine) {
+    console.log("Connection lost. Sync postponed.");
+    return;
+  }
+
+  // FIRST: Pull server changes and detect conflicts.
+  await pullServerChanges();
+
+  if (!navigator.onLine) {
+    console.log("Connection lost. Sync postponed.");
+    return;
+  }
+
+  // SECOND: Push changes without unresolved conflicts.
+  await pushLocalChanges();
+
+  console.log("Mind Vault synchronization completed.");
+};
+
 export const synchronizeData = async (): Promise<void> => {
+  // Prevent simultaneous sync operations within this tab.
   if (syncInProgress) {
     return;
   }
 
   if (!navigator.onLine) {
     console.log("Mind Vault is offline. Sync postponed.");
-
     return;
   }
 
   syncInProgress = true;
 
   try {
-    // Retry changes interrupted by an earlier session.
-    await resetPendingChanges();
+    // Use browser-wide locking when supported.
+    if (navigator.locks) {
+      await navigator.locks.request(
+        "mindvault-sync",
+        { mode: "exclusive" },
+        async () => {
+          // Recheck connectivity after acquiring the lock.
+          if (!navigator.onLine) {
+            console.log("Mind Vault is offline. Sync postponed.");
+            return;
+          }
 
-    // FIRST: Pull server changes and detect conflicts.
-    await pullServerChanges();
-
-    // SECOND: Push changes without unresolved conflicts.
-    await pushLocalChanges();
-
-    console.log("Mind Vault synchronization completed.");
+          await performSynchronization();
+        },
+      );
+    } else {
+      // Fallback for browsers without Web Locks support.
+      await performSynchronization();
+    }
   } catch (error) {
     console.error("Mind Vault synchronization failed:", error);
-
     throw error;
   } finally {
     syncInProgress = false;

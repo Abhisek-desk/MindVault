@@ -183,6 +183,14 @@ export const keepLocalVersion = async (conflictId: string): Promise<void> => {
         if (localData) {
           const folder = localData as unknown as LocalFolder;
 
+          if (
+            folder.id !== entityId ||
+            typeof folder.name !== "string" ||
+            typeof folder.color !== "string"
+          ) {
+            throw new Error("Invalid local folder conflict data.");
+          }
+
           if (serverOperation === "delete") {
             const recreatedFolder: LocalFolder = {
               ...folder,

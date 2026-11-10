@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 import {
   Menu,
   Search,
@@ -18,38 +16,6 @@ interface DashboardHeaderProps {
   onMenuClick: () => void;
 }
 
-async function checkInternetConnection(): Promise<boolean> {
-  if (!navigator.onLine) {
-    return false;
-  }
-
-  const controller = new AbortController();
-
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    4000
-  );
-
-  try {
-    const response = await fetch("/api/v1/health", {
-      method: "GET",
-      credentials: "same-origin",
-      cache: "no-store",
-      redirect: "error",
-      headers: {
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-
-    return response.ok;
-  } catch {
-    return false;
-  } finally {
-    window.clearTimeout(timeout);
-  }
-}
-
 function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const user = useAuthStore((state) => state.user);
 
@@ -57,44 +23,7 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
   const lastSyncedAt = useSyncStore((state) => state.lastSyncedAt);
   const syncNow = useSyncStore((state) => state.syncNow);
 
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const verifyConnection = async () => {
-      const connected = await checkInternetConnection();
-
-      if (mounted) {
-        setIsOnline(connected);
-      }
-    };
-
-    const handleOnline = () => {
-      void verifyConnection();
-    };
-
-    const handleOffline = () => {
-      setIsOnline(false);
-    };
-
-    void verifyConnection();
-
-    const interval = window.setInterval(() => {
-      void verifyConnection();
-    }, 10000);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      mounted = false;
-      window.clearInterval(interval);
-
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+  const isOnline = status !== "offline";
 
   const statusDetails = {
     idle: {
@@ -135,9 +64,13 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
         </button>
 
         <div className="hidden sm:block">
-          <h2 className="text-lg font-bold text-[#17243D]">My Workspace</h2>
+          <h2 className="text-lg font-bold text-[#17243D]">
+            My Workspace
+          </h2>
 
-          <p className="text-xs text-gray-500">Your personal knowledge space</p>
+          <p className="text-xs text-gray-500">
+            Your personal knowledge space
+          </p>
         </div>
       </div>
 
@@ -179,9 +112,13 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
             <RefreshCw size={14} className="animate-spin" />
           )}
 
-          {status === "synced" && isOnline && <CheckCircle2 size={14} />}
+          {status === "synced" && isOnline && (
+            <CheckCircle2 size={14} />
+          )}
 
-          {status === "error" && isOnline && <AlertCircle size={14} />}
+          {status === "error" && isOnline && (
+            <AlertCircle size={14} />
+          )}
 
           {currentStatus.label}
         </div>

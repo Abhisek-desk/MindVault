@@ -350,7 +350,7 @@ export const pushLocalChanges = async (): Promise<void> => {
       }
 
       mutationIds.add(mutationId);
-    } 
+    }
 
     if (validChanges.length === 0) {
       break;
@@ -416,9 +416,15 @@ export const pushLocalChanges = async (): Promise<void> => {
         },
       );
 
-      console.log(`Successfully synchronized ${validChanges.length} changes.`);
+      if (import.meta.env.DEV) {
+        console.log(
+          `Successfully synchronized ${validChanges.length} changes.`,
+        );
+      }
     } catch (error) {
-      console.error("Push synchronization failed:", error);
+      if (import.meta.env.DEV) {
+        console.error("Push synchronization failed.");
+      }
 
       // Preserve changes for a future retry.
       for (const change of validChanges) {
@@ -506,9 +512,9 @@ const applyServerChanges = async (
             });
           }
 
-          console.log(
-            `Conflict detected: ${change.entityType} ${change.entityId}`,
-          );
+          if (import.meta.env.DEV) {
+            console.log("Synchronization conflict detected.");
+          }
 
           continue;
         }
@@ -678,7 +684,9 @@ export const pullServerChanges = async (): Promise<void> => {
 
 const performSynchronization = async (): Promise<void> => {
   if (!navigator.onLine) {
-    console.log("Mind Vault is offline. Sync postponed.");
+    if (import.meta.env.DEV) {
+      console.log("Mind Vault is offline. Sync postponed.");
+    }
     return;
   }
 
@@ -686,7 +694,9 @@ const performSynchronization = async (): Promise<void> => {
   await resetPendingChanges();
 
   if (!navigator.onLine) {
-    console.log("Connection lost. Sync postponed.");
+    if (import.meta.env.DEV) {
+      console.log("Connection lost. Sync postponed.");
+    }
     return;
   }
 
@@ -694,14 +704,18 @@ const performSynchronization = async (): Promise<void> => {
   await pullServerChanges();
 
   if (!navigator.onLine) {
-    console.log("Connection lost. Sync postponed.");
+    if (import.meta.env.DEV) {
+      console.log("Connection lost. Sync postponed.");
+    }
     return;
   }
 
   // SECOND: Push changes without unresolved conflicts.
   await pushLocalChanges();
 
-  console.log("Mind Vault synchronization completed.");
+  if (import.meta.env.DEV) {
+    console.log("Mind Vault synchronization completed.");
+  }
 };
 
 export const synchronizeData = async (): Promise<void> => {
@@ -738,7 +752,10 @@ export const synchronizeData = async (): Promise<void> => {
       await performSynchronization();
     }
   } catch (error) {
-    console.error("Mind Vault synchronization failed:", error);
+    if (import.meta.env.DEV) {
+      console.error("Mind Vault synchronization failed.");
+    }
+
     throw error;
   } finally {
     syncInProgress = false;

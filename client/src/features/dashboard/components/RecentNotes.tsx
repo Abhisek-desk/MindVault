@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import {
-  FileText,
-  ArrowRight,
-  Clock,
-  Plus
-} from "lucide-react";
+import { FileText, ArrowRight, Clock, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { db } from "../../../db/database";
@@ -31,8 +26,10 @@ function RecentNotes() {
         if (mounted) {
           setRecentNotes(notes);
         }
-      } catch (error) {
-        console.error("Failed to load recent notes:", error);
+      } catch {
+        if (import.meta.env.DEV) {
+          console.error("Failed to load recent notes.");
+        }
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -57,18 +54,15 @@ function RecentNotes() {
     return parsedDate.toLocaleDateString(undefined, {
       day: "numeric",
       month: "short",
-      year: "numeric"
+      year: "numeric",
     });
   };
 
   return (
     <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-6 shadow-sm">
-
       <div className="mb-6 flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-[#17243D]">
-            Recent Notes
-          </h2>
+          <h2 className="text-xl font-bold text-[#17243D]">Recent Notes</h2>
 
           <p className="mt-1 text-sm text-gray-500">
             Continue where you left off.
@@ -90,14 +84,11 @@ function RecentNotes() {
         </div>
       ) : recentNotes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[#17243D]/15 py-12 text-center">
-
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F47768]/10 text-[#F47768]">
             <FileText size={26} />
           </div>
 
-          <h3 className="mt-4 font-semibold text-[#17243D]">
-            No notes yet
-          </h3>
+          <h3 className="mt-4 font-semibold text-[#17243D]">No notes yet</h3>
 
           <p className="mt-2 text-sm text-gray-500">
             Start capturing your ideas and knowledge.
@@ -113,7 +104,6 @@ function RecentNotes() {
         </div>
       ) : (
         <div className="space-y-3">
-
           {recentNotes.map((note, index) => (
             <motion.button
               key={note.id}
@@ -128,7 +118,6 @@ function RecentNotes() {
               </div>
 
               <div className="min-w-0 flex-1">
-
                 <h3 className="font-semibold text-[#17243D]">
                   {note.title || "Untitled Note"}
                 </h3>
@@ -141,16 +130,11 @@ function RecentNotes() {
                   <Clock size={13} />
                   Updated {formatDate(note.updatedAt)}
                 </div>
-
               </div>
 
-              <ArrowRight
-                size={18}
-                className="mt-2 shrink-0 text-gray-400"
-              />
+              <ArrowRight size={18} className="mt-2 shrink-0 text-gray-400" />
             </motion.button>
           ))}
-
         </div>
       )}
 
@@ -161,7 +145,6 @@ function RecentNotes() {
         <Plus size={17} />
         Create a Note
       </button>
-
     </section>
   );
 }

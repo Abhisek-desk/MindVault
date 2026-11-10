@@ -17,7 +17,9 @@ registerSW({
   onRegisteredSW(_swUrl, registration) {
     if (!registration) return;
 
-    console.log("Mind Vault service worker registered.");
+    if (import.meta.env.DEV) {
+      console.log("Mind Vault service worker registered.");
+    }
 
     // Check for application updates every hour.
     window.setInterval(
@@ -30,8 +32,10 @@ registerSW({
     );
   },
 
-  onRegisterError(error) {
-    console.error("Service worker registration failed:", error);
+  onRegisterError() {
+    if (import.meta.env.DEV) {
+      console.error("Service worker registration failed.");
+    }
   },
 });
 

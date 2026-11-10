@@ -42,17 +42,17 @@ const createSearchIndex = () => {
       "type",
       "noteId",
       "packId",
-      "documentName"
+      "documentName",
     ],
 
     searchOptions: {
       boost: {
         title: 3,
-        content: 1
+        content: 1,
       },
       fuzzy: 0.2,
-      prefix: true
-    }
+      prefix: true,
+    },
   });
 };
 
@@ -61,7 +61,7 @@ const createSearchIndex = () => {
 // =====================================
 
 const indexLocalNotes = async (
-  index: MiniSearch<SearchDocument>
+  index: MiniSearch<SearchDocument>,
 ): Promise<void> => {
   const notes = await db.notes.toArray();
 
@@ -70,7 +70,7 @@ const indexLocalNotes = async (
     title: note.title,
     content: note.content,
     type: "note",
-    noteId: note.id
+    noteId: note.id,
   }));
 
   if (documents.length > 0) {
@@ -83,7 +83,7 @@ const indexLocalNotes = async (
 // =====================================
 
 const indexKnowledgePacks = async (
-  index: MiniSearch<SearchDocument>
+  index: MiniSearch<SearchDocument>,
 ): Promise<void> => {
   const packs = await db.packs.toArray();
 
@@ -96,9 +96,7 @@ const indexKnowledgePacks = async (
       const zip = await JSZip.loadAsync(pack.contentBlob);
 
       const files = Object.values(zip.files).filter(
-        (file) =>
-          !file.dir &&
-          /\.(md|markdown|txt)$/i.test(file.name)
+        (file) => !file.dir && /\.(md|markdown|txt)$/i.test(file.name),
       );
 
       for (const file of files) {
@@ -110,16 +108,15 @@ const indexKnowledgePacks = async (
           content,
           type: "pack",
           packId: pack.id,
-          documentName: file.name
+          documentName: file.name,
         };
 
         index.add(document);
       }
-    } catch (error) {
-      console.error(
-        `Could not index knowledge pack: ${pack.title}`,
-        error
-      );
+    } catch {
+      if (import.meta.env.DEV) {
+        console.error("Could not index a downloaded knowledge pack.");
+      }
     }
   }
 };
@@ -128,29 +125,21 @@ const indexKnowledgePacks = async (
 // GENERATE SEARCH SNIPPET
 // =====================================
 
-const createSnippet = (
-  content: string,
-  query: string
-): string => {
+const createSnippet = (content: string, query: string): string => {
   const normalizedContent = content.replace(/\s+/g, " ").trim();
 
   if (!normalizedContent) {
     return "No preview available.";
   }
 
-  const position = normalizedContent
-    .toLowerCase()
-    .indexOf(query.toLowerCase());
+  const position = normalizedContent.toLowerCase().indexOf(query.toLowerCase());
 
   if (position === -1) {
     return normalizedContent.slice(0, 200) + "...";
   }
 
   const start = Math.max(0, position - 70);
-  const end = Math.min(
-    normalizedContent.length,
-    position + query.length + 130
-  );
+  const end = Math.min(normalizedContent.length, position + query.length + 130);
 
   return (
     (start > 0 ? "..." : "") +
@@ -164,7 +153,7 @@ const createSnippet = (
 // =====================================
 
 export const searchOfflineContent = async (
-  query: string
+  query: string,
 ): Promise<SearchResult[]> => {
   const trimmedQuery = query.trim();
 
@@ -178,7 +167,7 @@ export const searchOfflineContent = async (
   await indexKnowledgePacks(index);
 
   const results = index.search(trimmedQuery, {
-    combineWith: "OR"
+    combineWith: "OR",
   });
 
   return results.map((result) => {
@@ -190,15 +179,11 @@ export const searchOfflineContent = async (
       type: result.type as "note" | "pack",
       snippet: createSnippet(content, trimmedQuery),
       score: result.score,
-      noteId: result.noteId
-        ? String(result.noteId)
-        : undefined,
-      packId: result.packId
-        ? String(result.packId)
-        : undefined,
+      noteId: result.noteId ? String(result.noteId) : undefined,
+      packId: result.packId ? String(result.packId) : undefined,
       documentName: result.documentName
         ? String(result.documentName)
-        : undefined
+        : undefined,
     };
   });
 };

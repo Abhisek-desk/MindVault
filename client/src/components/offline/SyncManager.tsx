@@ -10,10 +10,7 @@ async function checkInternetConnection(): Promise<boolean> {
 
   const controller = new AbortController();
 
-  const timeout = window.setTimeout(
-    () => controller.abort(),
-    4000
-  );
+  const timeout = window.setTimeout(() => controller.abort(), 4000);
 
   try {
     const response = await fetch("/api/v1/health", {
@@ -36,9 +33,7 @@ async function checkInternetConnection(): Promise<boolean> {
 }
 
 function SyncManager() {
-  const isAuthenticated = useAuthStore(
-    (state) => state.isAuthenticated
-  );
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   const syncNow = useSyncStore((state) => state.syncNow);
   const setOffline = useSyncStore((state) => state.setOffline);
@@ -79,9 +74,7 @@ function SyncManager() {
           lastSyncAttempt = now;
 
           if (import.meta.env.DEV) {
-            console.log(
-              "Internet restored. Starting synchronization."
-            );
+            console.log("Internet restored. Starting synchronization.");
           }
 
           await syncNow();
@@ -91,16 +84,11 @@ function SyncManager() {
         // Retry failed synchronization every 30 seconds.
         const syncStatus = useSyncStore.getState().status;
 
-        if (
-          syncStatus === "error" &&
-          now - lastSyncAttempt >= RETRY_INTERVAL
-        ) {
+        if (syncStatus === "error" && now - lastSyncAttempt >= RETRY_INTERVAL) {
           lastSyncAttempt = now;
 
           if (import.meta.env.DEV) {
-            console.log(
-              "Retrying failed synchronization."
-            );
+            console.log("Retrying failed synchronization.");
           }
 
           await syncNow();
@@ -123,9 +111,10 @@ function SyncManager() {
     void verifyAndSync();
 
     // Check connectivity every 10 seconds.
+    // Check connectivity every 30 seconds.
     const interval = window.setInterval(() => {
       void verifyAndSync();
-    }, 10000);
+    }, 30000);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);

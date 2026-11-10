@@ -96,7 +96,7 @@ function StatsCards() {
       <div className="mb-5">
         <h2 className="text-xl font-bold text-[#17243D]">Your Overview</h2>
 
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-[#596273]">
           A quick look at your knowledge workspace.
         </p>
       </div>

@@ -2,7 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, fireEvent,waitFor } from "@testing-library/react";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import JSZip from "jszip";
@@ -87,8 +87,8 @@ describe("PackReaderPage", () => {
       await screen.findByText("Welcome to Mind Vault."),
     ).toBeInTheDocument();
 
-    expect(screen.getByText("01-introduction.md")).toBeInTheDocument();
-    expect(screen.getByText("02-advanced.md")).toBeInTheDocument();
+    expect(screen.getAllByText("01-introduction.md").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("02-advanced.md").length).toBeGreaterThan(0);
   });
 
   it("switches between documents", async () => {
@@ -158,5 +158,83 @@ describe("PackReaderPage", () => {
     );
 
     expect(mockNavigate).toHaveBeenCalledWith("/library");
+  });
+  it("keeps the newest document when an older document loads later", async () => {
+    const pack = await createTestPack();
+
+    let resolveSlow!: (value: string) => void;
+    let resolveFast!: (value: string) => void;
+
+    const slowPromise = new Promise<string>((resolve) => {
+      resolveSlow = resolve;
+    });
+
+    const fastPromise = new Promise<string>((resolve) => {
+      resolveFast = resolve;
+    });
+
+    const fakeZip = {
+      files: {
+        "01-introduction.md": {
+          name: "01-introduction.md",
+          dir: false,
+        },
+        "02-slow.md": {
+          name: "02-slow.md",
+          dir: false,
+        },
+        "03-fast.md": {
+          name: "03-fast.md",
+          dir: false,
+        },
+      },
+      file: (name: string) => ({
+        async: () => {
+          if (name === "01-introduction.md") {
+            return Promise.resolve("Initial content.");
+          }
+
+          if (name === "02-slow.md") {
+            return slowPromise;
+          }
+
+          if (name === "03-fast.md") {
+            return fastPromise;
+          }
+
+          return Promise.reject(new Error("File not found."));
+        },
+      }),
+    } as unknown as JSZip;
+
+    vi.spyOn(JSZip, "loadAsync").mockResolvedValue(fakeZip);
+
+    mockGetLocalPack.mockResolvedValue(pack);
+
+    render(<PackReaderPage />);
+
+    await screen.findByText("Initial content.");
+
+    fireEvent.click(screen.getByRole("button", { name: /02-slow\.md/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /03-fast\.md/i }));
+
+    resolveFast("Fast document content.");
+
+    expect(
+      await screen.findByText("Fast document content."),
+    ).toBeInTheDocument();
+
+    resolveSlow("Slow document content.");
+
+    await waitFor(() => {
+      expect(screen.getByText("03-fast.md")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Fast document content.")).toBeInTheDocument();
+
+    expect(
+      screen.queryByText("Slow document content."),
+    ).not.toBeInTheDocument();
   });
 });

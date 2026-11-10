@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://mindvault-6ff3.onrender.com/api/$1"
+    },
+    {
+      "source": "/downloads/(.*)",
+      "destination": "https://mindvault-6ff3.onrender.com/downloads/$1"
+    }
+  ]
+}

@@ -2,7 +2,13 @@
 
 import "@testing-library/jest-dom/vitest";
 
-import { cleanup, render, screen, fireEvent,waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import JSZip from "jszip";
@@ -228,7 +234,7 @@ describe("PackReaderPage", () => {
     resolveSlow("Slow document content.");
 
     await waitFor(() => {
-      expect(screen.getByText("03-fast.md")).toBeInTheDocument();
+      expect(screen.getAllByText("03-fast.md").length).toBeGreaterThan(0);
     });
 
     expect(screen.getByText("Fast document content.")).toBeInTheDocument();

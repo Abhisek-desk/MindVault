@@ -16,6 +16,7 @@ function PackReaderPage() {
   const navigate = useNavigate();
 
   const zipRef = useRef<JSZip | null>(null);
+  const documentRequestRef = useRef(0);
 
   const [title, setTitle] = useState("");
   const [documents, setDocuments] = useState<string[]>([]);
@@ -51,7 +52,7 @@ function PackReaderPage() {
           );
         }
 
-        const MAX_PACK_SIZE = 50 * 1024 * 1024; // 50 MB
+        const MAX_PACK_SIZE = 50 * 1024 * 1024;
 
         if (pack.contentBlob.size > MAX_PACK_SIZE) {
           throw new Error(
@@ -112,12 +113,20 @@ function PackReaderPage() {
 
     return () => {
       cancelled = true;
+      documentRequestRef.current += 1;
       zipRef.current = null;
     };
   }, [packId]);
 
   // OPEN SELECTED DOCUMENT
   const handleDocumentSelect = async (fileName: string) => {
+    // Avoid loading the currently selected document again.
+    if (fileName === selectedDocument) {
+      return;
+    }
+
+    const requestId = ++documentRequestRef.current;
+
     try {
       const zip = zipRef.current;
 
@@ -125,28 +134,41 @@ function PackReaderPage() {
         throw new Error("Knowledge pack is not loaded.");
       }
 
-      setSelectedDocument(fileName);
-      setContentLoading(true);
-      setError("");
-      setContent("");
-
       const file = zip.file(fileName);
 
       if (!file) {
         throw new Error("Document could not be found.");
       }
 
+      setSelectedDocument(fileName);
+      setContentLoading(true);
+      setError("");
+      setContent("");
+
       const text = await file.async("string");
+
+      // Ignore results from older requests.
+      if (requestId !== documentRequestRef.current) {
+        return;
+      }
 
       setContent(text);
     } catch (err) {
+      // Ignore errors from older requests.
+      if (requestId !== documentRequestRef.current) {
+        return;
+      }
+
       setError(
         err instanceof Error
           ? err.message
           : "Could not open document."
       );
     } finally {
-      setContentLoading(false);
+      // Only the latest request controls the loading state.
+      if (requestId === documentRequestRef.current) {
+        setContentLoading(false);
+      }
     }
   };
 

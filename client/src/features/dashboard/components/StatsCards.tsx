@@ -130,7 +130,7 @@ function StatsCards() {
                 {isLoading ? "..." : stat.value}
               </h3>
 
-              <p className="mt-2 text-xs text-gray-400">{stat.description}</p>
+              <p className="mt-2 text-xs text-[#596273]">{stat.description}</p>
             </motion.div>
           );
         })}

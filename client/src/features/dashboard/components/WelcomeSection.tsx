@@ -40,7 +40,7 @@ function WelcomeSection() {
         <div className="mt-7 flex flex-wrap gap-3">
           <button
             onClick={() => navigate("/notes")}
-            className="flex items-center gap-2 rounded-xl bg-[#F47768] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#e86657]"
+            className="flex items-center gap-2 rounded-xl bg-[#B83E32] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#962F27]"
           >
             <Plus size={18} />
             Create a Note

@@ -14,7 +14,7 @@ const actions = [
     description: "Capture a new idea.",
     icon: FilePlus,
     path: "/notes",
-    color: "bg-[#F47768]/10 text-[#F47768]"
+    color: "bg-[#F47768]/10 text-[#B83E32]"
   },
   {
     title: "New Folder",
@@ -83,7 +83,7 @@ function QuickActions() {
 
               <ArrowUpRight
                 size={18}
-                className="text-gray-400 transition group-hover:text-[#F47768]"
+                className="text-[#596273] transition group-hover:text-[#B83E32]"
               />
             </motion.button>
           );

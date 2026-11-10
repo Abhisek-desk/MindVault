@@ -43,7 +43,7 @@ function DashboardPage() {
             </div>
           </div>
 
-          <footer className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-gray-400">
+          <footer className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-[#596273]">
             © {new Date().getFullYear()} Mind Vault. Your Knowledge.
             Your Memory. Always Available.
           </footer>

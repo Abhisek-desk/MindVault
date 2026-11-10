@@ -71,7 +71,7 @@ function RecentNotes() {
 
         <button
           onClick={() => navigate("/notes")}
-          className="flex items-center gap-2 text-sm font-semibold text-[#F47768] transition hover:text-[#17243D]"
+          className="flex items-center gap-2 text-sm font-semibold text-[#B83E32] transition hover:text-[#17243D]"
         >
           View all
           <ArrowRight size={17} />
@@ -79,7 +79,7 @@ function RecentNotes() {
       </div>
 
       {isLoading ? (
-        <div className="py-12 text-center text-sm text-gray-400">
+        <div className="py-12 text-center text-sm text-[#596273]">
           Loading your notes...
         </div>
       ) : recentNotes.length === 0 ? (
@@ -96,7 +96,7 @@ function RecentNotes() {
 
           <button
             onClick={() => navigate("/notes")}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#F47768] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#e86657]"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#B83E32] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#962F27]"
           >
             <Plus size={17} />
             Create Your First Note
@@ -126,13 +126,13 @@ function RecentNotes() {
                   {note.content || "No content available."}
                 </p>
 
-                <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                <div className="mt-3 flex items-center gap-2 text-xs text-[#596273]">
                   <Clock size={13} />
                   Updated {formatDate(note.updatedAt)}
                 </div>
               </div>
 
-              <ArrowRight size={18} className="mt-2 shrink-0 text-gray-400" />
+              <ArrowRight size={18} className="mt-2 shrink-0 text-[#596273]" />
             </motion.button>
           ))}
         </div>

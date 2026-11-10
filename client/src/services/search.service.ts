@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import MiniSearch from "minisearch";
 import JSZip from "jszip";
 
@@ -29,10 +30,48 @@ export interface SearchResult {
 }
 
 // =====================================
+// SEARCH INDEX CACHE
+// =====================================
+
+let cachedIndex: MiniSearch<SearchDocument> | null = null;
+
+let cachedIndexRevision = -1;
+
+let indexBuildPromise: Promise<MiniSearch<SearchDocument>> | null = null;
+
+let indexBuildRevision = -1;
+
+let indexRevision = 0;
+
+// =====================================
+// INVALIDATE INDEX WHEN DATA CHANGES
+// =====================================
+
+Dexie.on("storagemutated", (parts) => {
+  const relevantMutation = Object.keys(parts).some(
+    (part) =>
+      part.startsWith(`idb://${db.name}/notes/`) ||
+      part.startsWith(`idb://${db.name}/packs/`),
+  );
+
+  if (!relevantMutation) {
+    return;
+  }
+
+  indexRevision++;
+
+  cachedIndex = null;
+  cachedIndexRevision = -1;
+
+  // Existing builds are allowed to finish, but their
+  // results will not be cached if the revision changed.
+});
+
+// =====================================
 // CREATE SEARCH INDEX
 // =====================================
 
-const createSearchIndex = () => {
+const createSearchIndex = (): MiniSearch<SearchDocument> => {
   return new MiniSearch<SearchDocument>({
     fields: ["title", "content"],
 
@@ -122,6 +161,68 @@ const indexKnowledgePacks = async (
 };
 
 // =====================================
+// BUILD SEARCH INDEX
+// =====================================
+
+const buildSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
+  const index = createSearchIndex();
+
+  await indexLocalNotes(index);
+  await indexKnowledgePacks(index);
+
+  return index;
+};
+
+// =====================================
+// GET REUSABLE SEARCH INDEX
+// =====================================
+
+const getSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
+  if (
+    cachedIndex &&
+    cachedIndexRevision === indexRevision
+  ) {
+    return cachedIndex;
+  }
+
+  if (
+    indexBuildPromise &&
+    indexBuildRevision === indexRevision
+  ) {
+    return indexBuildPromise;
+  }
+
+  const buildRevision = indexRevision;
+
+  const buildPromise = (async () => {
+    const index = await buildSearchIndex();
+
+    // Database changed while the index was being built.
+    // Discard the outdated index and build again.
+    if (buildRevision !== indexRevision) {
+      return getSearchIndex();
+    }
+
+    cachedIndex = index;
+    cachedIndexRevision = buildRevision;
+
+    return index;
+  })();
+
+  indexBuildPromise = buildPromise;
+  indexBuildRevision = buildRevision;
+
+  try {
+    return await buildPromise;
+  } finally {
+    if (indexBuildPromise === buildPromise) {
+      indexBuildPromise = null;
+      indexBuildRevision = -1;
+    }
+  }
+};
+
+// =====================================
 // GENERATE SEARCH SNIPPET
 // =====================================
 
@@ -132,14 +233,20 @@ const createSnippet = (content: string, query: string): string => {
     return "No preview available.";
   }
 
-  const position = normalizedContent.toLowerCase().indexOf(query.toLowerCase());
+  const position = normalizedContent
+    .toLowerCase()
+    .indexOf(query.toLowerCase());
 
   if (position === -1) {
     return normalizedContent.slice(0, 200) + "...";
   }
 
   const start = Math.max(0, position - 70);
-  const end = Math.min(normalizedContent.length, position + query.length + 130);
+
+  const end = Math.min(
+    normalizedContent.length,
+    position + query.length + 130,
+  );
 
   return (
     (start > 0 ? "..." : "") +
@@ -161,10 +268,7 @@ export const searchOfflineContent = async (
     return [];
   }
 
-  const index = createSearchIndex();
-
-  await indexLocalNotes(index);
-  await indexKnowledgePacks(index);
+  const index = await getSearchIndex();
 
   const results = index.search(trimmedQuery, {
     combineWith: "OR",

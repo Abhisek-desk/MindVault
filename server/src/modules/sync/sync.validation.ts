@@ -76,7 +76,7 @@ export const pushSyncSchema = z
 
       if (seenMutationIds.has(normalizedMutationId)) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["changes", index, "clientMutationId"],
           message: "Duplicate clientMutationId in synchronization batch",
         });
@@ -90,7 +90,7 @@ export const pushSyncSchema = z
         change.expectedVersion === undefined
       ) {
         context.addIssue({
-          code: z.ZodIssueCode.custom,
+          code: "custom",
           path: ["changes", index, "expectedVersion"],
           message: `Expected version is required for ${change.operation} operations`,
         });

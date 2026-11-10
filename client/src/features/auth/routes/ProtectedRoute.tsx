@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "../../../stores/auth.store";
+import PageMetadata from "../../../components/common/PageMetadata";
 
 function ProtectedRoute() {
   const isAuthenticated = useAuthStore(
@@ -24,9 +25,20 @@ function ProtectedRoute() {
     );
   }
 
-  return isAuthenticated
-    ? <Outlet />
-    : <Navigate to="/login" replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <>
+      <PageMetadata
+        title="My Workspace - Mind Vault"
+        description="Your personal Mind Vault knowledge workspace."
+      />
+
+      <Outlet />
+    </>
+  );
 }
 
 export default ProtectedRoute;

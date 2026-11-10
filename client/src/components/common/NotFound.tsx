@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { Home, SearchX } from "lucide-react";
+import PageMetadata from "./PageMetadata";
 
 function NotFound() {
   return (
@@ -42,6 +43,10 @@ function NotFound() {
           MIND VAULT
         </p>
       </motion.div>
+      <PageMetadata
+        title="Page Not Found - Mind Vault"
+        description="The page you are looking for could not be found."
+      />
     </div>
   );
 }

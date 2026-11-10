@@ -4,40 +4,42 @@ import { lazy, Suspense, type ReactNode } from "react";
 // LAZY-LOADED PAGES
 // =====================================
 
-export const LoginPage = lazy(
-  () => import("../features/auth/pages/LoginPage")
-);
+export const LoginPage = lazy(() => import("../features/auth/pages/LoginPage"));
 
 export const RegisterPage = lazy(
-  () => import("../features/auth/pages/RegisterPage")
+  () => import("../features/auth/pages/RegisterPage"),
 );
 
 export const DashboardPage = lazy(
-  () => import("../features/dashboard/pages/DashboardPage")
+  () => import("../features/dashboard/pages/DashboardPage"),
 );
 
 export const NotesPage = lazy(
-  () => import("../features/notes/pages/NotesPage")
+  () => import("../features/notes/pages/NotesPage"),
 );
 
 export const FoldersPage = lazy(
-  () => import("../features/library/pages/FoldersPage")
+  () => import("../features/library/pages/FoldersPage"),
 );
 
 export const LibraryPage = lazy(
-  () => import("../features/library/pages/LibraryPage")
+  () => import("../features/library/pages/LibraryPage"),
 );
 
 export const PackReaderPage = lazy(
-  () => import("../features/library/pages/PackReaderPage")
+  () => import("../features/library/pages/PackReaderPage"),
 );
 
 export const SearchPage = lazy(
-  () => import("../features/search/pages/SearchPage")
+  () => import("../features/search/pages/SearchPage"),
 );
 
 export const ConflictsPage = lazy(
-  () => import("../features/sync/pages/ConflictsPage")
+  () => import("../features/sync/pages/ConflictsPage"),
+);
+
+export const LandingPage = lazy(
+  () => import("../features/landing/pages/LandingPage"),
 );
 
 // =====================================
@@ -62,14 +64,6 @@ function PageLoader() {
 // ROUTE PAGE WRAPPER
 // =====================================
 
-export function RoutePage({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <Suspense fallback={<PageLoader />}>
-      {children}
-    </Suspense>
-  );
+export function RoutePage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
 }

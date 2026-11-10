@@ -1,12 +1,10 @@
-import {
-  createBrowserRouter,
-  Navigate,
-} from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 
 import NotFound from "../components/common/NotFound";
 
 import ProtectedRoute from "../features/auth/routes/ProtectedRoute";
 import PublicRoute from "../features/auth/routes/PublicRoute";
+import LandingPage from '../features/landing/pages/LandingPage'
 
 import {
   LoginPage,
@@ -112,7 +110,11 @@ const router = createBrowserRouter([
 
   {
     path: "/",
-    element: <Navigate to="/dashboard" replace />,
+    element: (
+      <RoutePage>
+        <LandingPage />
+      </RoutePage>
+    ),
   },
 
   {

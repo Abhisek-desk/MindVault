@@ -353,7 +353,7 @@ function LandingPage() {
 
               <div className="mt-7">
                 <div className="mb-4 flex items-center justify-between">
-                  <h3 className="font-bold">Recently Saved</h3>
+                  <p className="font-bold">Recently Saved</p>
 
                   <span className="text-xs font-semibold text-[#B83E32]">
                     Your library
@@ -475,7 +475,7 @@ function LandingPage() {
               return (
                 <article key={step.number} className="relative">
                   <div className="flex items-center justify-between">
-                    <span className="text-4xl font-bold text-[#B83E32]/30">
+                    <span className="text-4xl font-bold text-[#B83E32]">
                       {step.number}
                     </span>
 
@@ -708,7 +708,10 @@ function LandingPage() {
         {/* COPYRIGHT */}
         <div className="border-t border-white/10">
           <div className="mx-auto flex max-w-7xl flex-col gap-3 px-6 py-6 text-sm text-white/55 sm:flex-row sm:items-center sm:justify-between lg:px-10">
-            <p>© {new Date().getFullYear()} Mind Vault. All rights reserved.</p>
+            <p>
+              Copyright {new Date().getFullYear()} Mind Vault. All rights
+              reserved.
+            </p>
 
             <p>Built to keep knowledge within reach.</p>
           </div>

@@ -4,7 +4,6 @@ import NotFound from "../components/common/NotFound";
 
 import ProtectedRoute from "../features/auth/routes/ProtectedRoute";
 import PublicRoute from "../features/auth/routes/PublicRoute";
-import LandingPage from '../features/landing/pages/LandingPage'
 
 import {
   LoginPage,
@@ -15,6 +14,7 @@ import {
   LibraryPage,
   PackReaderPage,
   SearchPage,
+  LandingPage,
   ConflictsPage,
   RoutePage,
 } from "./route-pages";

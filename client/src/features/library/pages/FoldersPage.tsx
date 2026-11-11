@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Folder,
@@ -32,6 +33,8 @@ const folderColors = [
 ];
 
 function FoldersPage() {
+  const navigate = useNavigate();
+
   const [folders, setFolders] = useState<LocalFolder[]>([]);
   const [noteCounts, setNoteCounts] = useState<Record<string, number>>({});
   const [search, setSearch] = useState("");
@@ -144,10 +147,20 @@ function FoldersPage() {
   };
 
   // =====================================
+  // ADD NOTE TO SELECTED FOLDER
+  // =====================================
+
+  const handleAddNote = (folder: LocalFolder) => {
+    navigate(`/notes?folderId=${encodeURIComponent(folder.id)}`);
+  };
+
+  // =====================================
   // SAVE FOLDER
   // =====================================
 
-  const handleSaveFolder = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleSaveFolder = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
 
     if (!folderName.trim()) {
@@ -182,24 +195,24 @@ function FoldersPage() {
   // =====================================
 
   const handleDeleteFolder = async (folder: LocalFolder) => {
-  const count = noteCounts[folder.id] || 0;
+    const count = noteCounts[folder.id] || 0;
 
-  const message =
-    count > 0
-      ? `Delete "${folder.name}"? Its ${count} note(s) will be moved to unfiled notes.`
-      : `Delete "${folder.name}"?`;
+    const message =
+      count > 0
+        ? `Delete "${folder.name}"? Its ${count} note(s) will be moved to unfiled notes.`
+        : `Delete "${folder.name}"?`;
 
-  if (!window.confirm(message)) {
-    return;
-  }
+    if (!window.confirm(message)) {
+      return;
+    }
 
-  try {
-    await deleteLocalFolderAndUnassignNotes(folder.id);
-    await loadFolders();
-  } catch (err) {
-    setError(err instanceof Error ? err.message : "Unable to delete folder.");
-  }
-};
+    try {
+      await deleteLocalFolderAndUnassignNotes(folder.id);
+      await loadFolders();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete folder.");
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5]">
@@ -296,6 +309,7 @@ function FoldersPage() {
                         <button
                           onClick={() => openEditModal(folder)}
                           title="Edit folder"
+                          aria-label={`Edit ${folder.name}`}
                           className="rounded-lg p-2 text-gray-400 transition hover:bg-[#F8F1E5] hover:text-[#17243D]"
                         >
                           <Pencil size={17} />
@@ -304,6 +318,7 @@ function FoldersPage() {
                         <button
                           onClick={() => handleDeleteFolder(folder)}
                           title="Delete folder"
+                          aria-label={`Delete ${folder.name}`}
                           className="rounded-lg p-2 text-gray-400 transition hover:bg-red-50 hover:text-red-500"
                         >
                           <Trash2 size={17} />
@@ -339,6 +354,16 @@ function FoldersPage() {
                         </span>
                       </div>
                     </div>
+
+                    {/* ADD NOTE BUTTON */}
+
+                    <button
+                      onClick={() => handleAddNote(folder)}
+                      className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-[#F47768]/10 px-4 py-3 text-sm font-semibold text-[#B83E32] transition hover:bg-[#F47768] hover:text-white"
+                    >
+                      <Plus size={17} />
+                      Add Note
+                    </button>
                   </div>
                 );
               })}

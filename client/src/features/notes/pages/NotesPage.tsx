@@ -10,6 +10,7 @@ import {
   Wifi,
   WifiOff,
   ArrowLeft,
+  Folder,
 } from "lucide-react";
 
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -24,12 +25,16 @@ import {
   deleteLocalNote,
 } from "../../../db/note.db";
 
-import type { LocalNote } from "../../../db/database";
+import { getLocalFolderById } from "../../../db/folder.db";
+
+import type { LocalNote, LocalFolder } from "../../../db/database";
 
 function NotesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
   const requestedNoteId = searchParams.get("noteId");
+  const requestedFolderId = searchParams.get("folderId");
 
   const [notes, setNotes] = useState<LocalNote[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
@@ -45,6 +50,13 @@ function NotesPage() {
 
   const [error, setError] = useState("");
 
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
+    null,
+  );
+
+  const [selectedFolder, setSelectedFolder] =
+    useState<LocalFolder | null>(null);
+
   const isOnline = navigator.onLine;
 
   // LOAD NOTES
@@ -53,6 +65,7 @@ function NotesPage() {
     setNotes(localNotes);
   };
 
+  // INITIALIZE NOTES AND REQUESTED FOLDER/NOTE
   useEffect(() => {
     let cancelled = false;
 
@@ -64,6 +77,7 @@ function NotesPage() {
 
         setNotes(localNotes);
 
+        // Existing note navigation takes priority.
         if (requestedNoteId) {
           const requestedNote = localNotes.find(
             (note) => note.id === requestedNoteId,
@@ -73,10 +87,56 @@ function NotesPage() {
             setSelectedNoteId(requestedNote.id);
             setTitle(requestedNote.title);
             setContent(requestedNote.content);
+            setSelectedFolderId(null);
+            setSelectedFolder(null);
             setIsCreating(false);
             setError("");
+            return;
           }
+
+          setSelectedNoteId(null);
+          setIsCreating(false);
+          setError("The requested note could not be found.");
+          return;
         }
+
+        // Open a new note inside the requested folder.
+        if (requestedFolderId) {
+          if (!/^[a-fA-F0-9]{24}$/.test(requestedFolderId)) {
+            setError("Invalid folder selected.");
+            setIsCreating(false);
+            return;
+          }
+
+          const folder = await getLocalFolderById(requestedFolderId);
+
+          if (cancelled) return;
+
+          if (!folder) {
+            setSelectedFolderId(null);
+            setSelectedFolder(null);
+            setIsCreating(false);
+            setError(
+              "This folder could not be found. It may have been deleted.",
+            );
+            return;
+          }
+
+          setSelectedNoteId(null);
+          setTitle("");
+          setContent("");
+          setSelectedFolderId(folder.id);
+          setSelectedFolder(folder);
+          setIsCreating(true);
+          setError("");
+          return;
+        }
+
+        // Normal notes page.
+        setSelectedNoteId(null);
+        setSelectedFolderId(null);
+        setSelectedFolder(null);
+        setIsCreating(false);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -91,7 +151,7 @@ function NotesPage() {
     return () => {
       cancelled = true;
     };
-  }, [requestedNoteId]);
+  }, [requestedNoteId, requestedFolderId]);
 
   // SELECTED NOTE
   const selectedNote = notes.find((note) => note.id === selectedNoteId);
@@ -112,6 +172,8 @@ function NotesPage() {
   // CREATE NEW NOTE
   const handleNewNote = () => {
     setSelectedNoteId(null);
+    setSelectedFolderId(null);
+    setSelectedFolder(null);
     setTitle("");
     setContent("");
     setError("");
@@ -121,6 +183,8 @@ function NotesPage() {
   // OPEN NOTE
   const handleSelectNote = (note: LocalNote) => {
     setSelectedNoteId(note.id);
+    setSelectedFolderId(null);
+    setSelectedFolder(null);
     setTitle(note.title);
     setContent(note.content);
     setError("");
@@ -145,7 +209,11 @@ function NotesPage() {
           content,
         });
       } else {
-        const newNote = await createLocalNote(title, content);
+        const newNote = await createLocalNote(
+          title,
+          content,
+          selectedFolderId,
+        );
 
         setSelectedNoteId(newNote.id);
         setIsCreating(false);
@@ -417,6 +485,20 @@ function NotesPage() {
                       </button>
                     </div>
                   </div>
+
+                  {/* FOLDER CONTEXT */}
+
+                  {selectedFolder && isCreating && (
+                    <div className="mb-5 flex items-center gap-2 rounded-xl border border-[#F47768]/20 bg-[#F47768]/5 p-3 text-sm">
+                      <Folder size={17} className="text-[#F47768]" />
+
+                      <span className="text-gray-500">Saving in:</span>
+
+                      <span className="font-semibold text-[#17243D]">
+                        {selectedFolder.name}
+                      </span>
+                    </div>
+                  )}
 
                   {/* TITLE */}
 

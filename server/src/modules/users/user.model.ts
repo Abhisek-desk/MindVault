@@ -6,6 +6,7 @@ export interface IUser extends Document {
   passwordHash: string;
   preferredLanguage: string;
   refreshTokenHash?: string;
+  sessionVersion: number;
 }
 
 const userSchema = new Schema<IUser>(
@@ -40,6 +41,12 @@ const userSchema = new Schema<IUser>(
       type: String,
       select: false,
       default: null,
+    },
+
+    sessionVersion: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
   },
   {

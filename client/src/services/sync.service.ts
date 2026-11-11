@@ -1,7 +1,9 @@
-import { apiRequest } from "./api";
+import { apiRequest, ApiError } from "./api";
+import { getCurrentUser } from "../features/auth/auth.service";
 
 import {
   db,
+  acquireDatabaseLease,
   type LocalNote,
   type LocalFolder,
   type LocalSyncChange,
@@ -14,6 +16,9 @@ import {
   resetPendingChanges,
   getSyncCursor,
 } from "../db/sync.db";
+
+import { useAuthStore } from "../stores/auth.store";
+import { withAccountSessionLock } from "./account-session-lock";
 
 // =====================================
 // API RESPONSE TYPES
@@ -680,6 +685,7 @@ export const pullServerChanges = async (): Promise<void> => {
 // =====================================
 // COMPLETE SYNCHRONIZATION
 // WITH CROSS-TAB LOCKING
+// AND ACCOUNT DATABASE PROTECTION
 // =====================================
 
 const performSynchronization = async (): Promise<void> => {
@@ -687,6 +693,7 @@ const performSynchronization = async (): Promise<void> => {
     if (import.meta.env.DEV) {
       console.log("Mind Vault is offline. Sync postponed.");
     }
+
     return;
   }
 
@@ -697,6 +704,7 @@ const performSynchronization = async (): Promise<void> => {
     if (import.meta.env.DEV) {
       console.log("Connection lost. Sync postponed.");
     }
+
     return;
   }
 
@@ -707,6 +715,7 @@ const performSynchronization = async (): Promise<void> => {
     if (import.meta.env.DEV) {
       console.log("Connection lost. Sync postponed.");
     }
+
     return;
   }
 
@@ -718,45 +727,99 @@ const performSynchronization = async (): Promise<void> => {
   }
 };
 
+// =====================================
+// SYNCHRONIZE ACTIVE ACCOUNT
+// WITH DATABASE LEASE
+// =====================================
+
+const synchronizeActiveAccount = async (): Promise<boolean> => {
+  const authState = useAuthStore.getState();
+
+  // Never synchronize without a ready authenticated account.
+  if (
+    !authState.isAuthenticated ||
+    !authState.isDatabaseReady ||
+    !authState.user
+  ) {
+    return false;
+  }
+
+  const userId = authState.user.id;
+
+  // Verify the account associated with the actual server cookie.
+  let serverUser;
+
+  try {
+    serverUser = await getCurrentUser();
+  } catch (error) {
+    // An expired or invalid session must never trigger synchronization.
+    if (
+      error instanceof ApiError &&
+      (error.status === 401 || error.status === 403)
+    ) {
+      return true;
+    }
+
+    throw error;
+  }
+
+  // Never synchronize one account's database under another account's session.
+  if (serverUser.id.toLowerCase() !== userId.toLowerCase()) {
+    return true;
+  }
+
+  // Protect this account's database throughout synchronization.
+  const releaseLease = acquireDatabaseLease(userId);
+
+  try {
+    await performSynchronization();
+  } finally {
+    releaseLease();
+  }
+
+  return false;
+};
+
+// =====================================
+// PUBLIC SYNCHRONIZATION FUNCTION
+// =====================================
+
 export const synchronizeData = async (): Promise<void> => {
-  // Prevent simultaneous sync operations within this tab.
   if (syncInProgress) {
     return;
   }
 
   if (!navigator.onLine) {
-    console.log("Mind Vault is offline. Sync postponed.");
+    if (import.meta.env.DEV) {
+      console.log("Mind Vault is offline. Sync postponed.");
+    }
+
     return;
   }
 
   syncInProgress = true;
 
-  try {
-    // Use browser-wide locking when supported.
-    if (navigator.locks) {
-      await navigator.locks.request(
-        "mindvault-sync",
-        { mode: "exclusive" },
-        async () => {
-          // Recheck connectivity after acquiring the lock.
-          if (!navigator.onLine) {
-            console.log("Mind Vault is offline. Sync postponed.");
-            return;
-          }
+  let accountChanged = false;
 
-          await performSynchronization();
-        },
-      );
-    } else {
-      // Fallback for browsers without Web Locks support.
-      await performSynchronization();
+  try {
+    await withAccountSessionLock(async () => {
+      if (!navigator.onLine) {
+        return;
+      }
+
+      accountChanged = await synchronizeActiveAccount();
+    });
+
+    // Reinitialize authentication after releasing the shared lock.
+    if (accountChanged) {
+      await useAuthStore.getState().initializeAuth();
     }
-  } catch (error) {
+  } catch {
     if (import.meta.env.DEV) {
       console.error("Mind Vault synchronization failed.");
     }
 
-    throw error;
+    throw new Error("Synchronization failed.");
   } finally {
     syncInProgress = false;
   }

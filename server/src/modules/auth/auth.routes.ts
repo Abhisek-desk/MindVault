@@ -60,6 +60,6 @@ router.post("/refresh", refreshLimiter, refresh);
 
 router.get("/me", protect, getMe);
 
-router.post("/logout", protect, logout);
+router.post("/logout", logout);
 
 export default router;

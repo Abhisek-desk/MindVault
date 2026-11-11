@@ -1,14 +1,20 @@
-import { db,  type LocalSyncChange} from "./database";
+import {
+  db,
+  withDatabaseLease,
+  type LocalSyncChange,
+} from "./database";
 
 // =====================================
 // GET PENDING SYNC CHANGES
 // =====================================
 
 export const getPendingChanges = async (): Promise<LocalSyncChange[]> => {
-  return db.syncQueue
-    .where("status")
-    .equals("pending")
-    .sortBy("createdAt");
+  return withDatabaseLease(async () => {
+    return db.syncQueue
+      .where("status")
+      .equals("pending")
+      .sortBy("createdAt");
+  });
 };
 
 // =====================================
@@ -16,9 +22,11 @@ export const getPendingChanges = async (): Promise<LocalSyncChange[]> => {
 // =====================================
 
 export const getAllSyncChanges = async (): Promise<LocalSyncChange[]> => {
-  return db.syncQueue
-    .orderBy("createdAt")
-    .toArray();
+  return withDatabaseLease(async () => {
+    return db.syncQueue
+      .orderBy("createdAt")
+      .toArray();
+  });
 };
 
 // =====================================
@@ -26,10 +34,12 @@ export const getAllSyncChanges = async (): Promise<LocalSyncChange[]> => {
 // =====================================
 
 export const markChangeAsProcessing = async (
-  id: number
+  id: number,
 ): Promise<void> => {
-  await db.syncQueue.update(id, {
-    status: "processing"
+  await withDatabaseLease(async () => {
+    await db.syncQueue.update(id, {
+      status: "processing",
+    });
   });
 };
 
@@ -38,10 +48,12 @@ export const markChangeAsProcessing = async (
 // =====================================
 
 export const markChangeAsFailed = async (
-  id: number
+  id: number,
 ): Promise<void> => {
-  await db.syncQueue.update(id, {
-    status: "failed"
+  await withDatabaseLease(async () => {
+    await db.syncQueue.update(id, {
+      status: "failed",
+    });
   });
 };
 
@@ -50,12 +62,14 @@ export const markChangeAsFailed = async (
 // =====================================
 
 export const resetPendingChanges = async (): Promise<void> => {
-  await db.syncQueue
-    .where("status")
-    .anyOf(["failed", "processing"])
-    .modify({
-      status: "pending"
-    });
+  await withDatabaseLease(async () => {
+    await db.syncQueue
+      .where("status")
+      .anyOf(["failed", "processing"])
+      .modify({
+        status: "pending",
+      });
+  });
 };
 
 // =====================================
@@ -63,9 +77,11 @@ export const resetPendingChanges = async (): Promise<void> => {
 // =====================================
 
 export const removeSyncChange = async (
-  id: number
+  id: number,
 ): Promise<void> => {
-  await db.syncQueue.delete(id);
+  await withDatabaseLease(async () => {
+    await db.syncQueue.delete(id);
+  });
 };
 
 // =====================================
@@ -73,7 +89,9 @@ export const removeSyncChange = async (
 // =====================================
 
 export const clearSyncQueue = async (): Promise<void> => {
-  await db.syncQueue.clear();
+  await withDatabaseLease(async () => {
+    await db.syncQueue.clear();
+  });
 };
 
 // =====================================
@@ -81,15 +99,17 @@ export const clearSyncQueue = async (): Promise<void> => {
 // =====================================
 
 export const saveSyncCursor = async (
-  cursor: string
+  cursor: string,
 ): Promise<void> => {
   if (!/^[a-fA-F0-9]{24}$/.test(cursor)) {
     throw new Error("Invalid synchronization cursor.");
   }
 
-  await db.syncMeta.put({
-    key: "lastSyncCursor",
-    value: cursor
+  await withDatabaseLease(async () => {
+    await db.syncMeta.put({
+      key: "lastSyncCursor",
+      value: cursor,
+    });
   });
 };
 
@@ -98,9 +118,11 @@ export const saveSyncCursor = async (
 // =====================================
 
 export const getSyncCursor = async (): Promise<string | null> => {
-  const metadata = await db.syncMeta.get("lastSyncCursor");
+  return withDatabaseLease(async () => {
+    const metadata = await db.syncMeta.get("lastSyncCursor");
 
-  return metadata?.value ?? null;
+    return metadata?.value ?? null;
+  });
 };
 
 // =====================================
@@ -108,5 +130,7 @@ export const getSyncCursor = async (): Promise<string | null> => {
 // =====================================
 
 export const clearSyncCursor = async (): Promise<void> => {
-  await db.syncMeta.delete("lastSyncCursor");
+  await withDatabaseLease(async () => {
+    await db.syncMeta.delete("lastSyncCursor");
+  });
 };

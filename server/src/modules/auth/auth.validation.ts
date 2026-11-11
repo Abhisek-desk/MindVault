@@ -6,6 +6,14 @@ export const registerSchema = z.object({
   email: z.string().trim().email().max(254),
 
   password: z.string().min(8).max(72),
+
+  preferredLanguage: z
+    .string()
+    .trim()
+    .min(2)
+    .max(20)
+    .optional()
+    .default("en"),
 });
 
 export const loginSchema = z.object({

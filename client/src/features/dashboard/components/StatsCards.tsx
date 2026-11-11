@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 
 import { FileText, Folder, BookOpen, Brain } from "lucide-react";
 
-import { db } from "../../../db/database";
+import { db, withDatabaseLease } from "../../../db/database";
 
 interface DashboardStats {
   notes: number;
@@ -25,11 +25,9 @@ function StatsCards() {
 
     const loadStatistics = async () => {
       try {
-        const [notes, folders, packs] = await Promise.all([
-          db.notes.count(),
-          db.folders.count(),
-          db.packs.count(),
-        ]);
+        const [notes, folders, packs] = await withDatabaseLease(() =>
+          Promise.all([db.notes.count(), db.folders.count(), db.packs.count()]),
+        );
 
         if (mounted) {
           setStats({

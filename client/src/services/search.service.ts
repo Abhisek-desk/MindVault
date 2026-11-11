@@ -2,7 +2,7 @@ import Dexie from "dexie";
 import MiniSearch from "minisearch";
 import JSZip from "jszip";
 
-import { db } from "../db/database";
+import { db, withDatabaseLease, getActiveDatabaseUserId } from "../db/database";
 
 // =====================================
 // SEARCH RESULT TYPES
@@ -34,12 +34,12 @@ export interface SearchResult {
 // =====================================
 
 let cachedIndex: MiniSearch<SearchDocument> | null = null;
-
 let cachedIndexRevision = -1;
+let cachedIndexUserId: string | null = null;
 
 let indexBuildPromise: Promise<MiniSearch<SearchDocument>> | null = null;
-
 let indexBuildRevision = -1;
+let indexBuildUserId: string | null = null;
 
 let indexRevision = 0;
 
@@ -177,17 +177,21 @@ const buildSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
 // GET REUSABLE SEARCH INDEX
 // =====================================
 
-const getSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
+const getSearchIndex = async (
+  userId: string | null,
+): Promise<MiniSearch<SearchDocument>> => {
   if (
     cachedIndex &&
-    cachedIndexRevision === indexRevision
+    cachedIndexRevision === indexRevision &&
+    cachedIndexUserId === userId
   ) {
     return cachedIndex;
   }
 
   if (
     indexBuildPromise &&
-    indexBuildRevision === indexRevision
+    indexBuildRevision === indexRevision &&
+    indexBuildUserId === userId
   ) {
     return indexBuildPromise;
   }
@@ -197,20 +201,20 @@ const getSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
   const buildPromise = (async () => {
     const index = await buildSearchIndex();
 
-    // Database changed while the index was being built.
-    // Discard the outdated index and build again.
     if (buildRevision !== indexRevision) {
-      return getSearchIndex();
+      return getSearchIndex(userId);
     }
 
     cachedIndex = index;
     cachedIndexRevision = buildRevision;
+    cachedIndexUserId = userId;
 
     return index;
   })();
 
   indexBuildPromise = buildPromise;
   indexBuildRevision = buildRevision;
+  indexBuildUserId = userId;
 
   try {
     return await buildPromise;
@@ -218,6 +222,7 @@ const getSearchIndex = async (): Promise<MiniSearch<SearchDocument>> => {
     if (indexBuildPromise === buildPromise) {
       indexBuildPromise = null;
       indexBuildRevision = -1;
+      indexBuildUserId = null;
     }
   }
 };
@@ -233,9 +238,7 @@ const createSnippet = (content: string, query: string): string => {
     return "No preview available.";
   }
 
-  const position = normalizedContent
-    .toLowerCase()
-    .indexOf(query.toLowerCase());
+  const position = normalizedContent.toLowerCase().indexOf(query.toLowerCase());
 
   if (position === -1) {
     return normalizedContent.slice(0, 200) + "...";
@@ -243,10 +246,7 @@ const createSnippet = (content: string, query: string): string => {
 
   const start = Math.max(0, position - 70);
 
-  const end = Math.min(
-    normalizedContent.length,
-    position + query.length + 130,
-  );
+  const end = Math.min(normalizedContent.length, position + query.length + 130);
 
   return (
     (start > 0 ? "..." : "") +
@@ -268,26 +268,29 @@ export const searchOfflineContent = async (
     return [];
   }
 
-  const index = await getSearchIndex();
+  return withDatabaseLease(async () => {
+    const userId = getActiveDatabaseUserId();
+    const index = await getSearchIndex(userId);
 
-  const results = index.search(trimmedQuery, {
-    combineWith: "OR",
-  });
+    const results = index.search(trimmedQuery, {
+      combineWith: "OR",
+    });
 
-  return results.map((result) => {
-    const content = String(result.content || "");
+    return results.map((result) => {
+      const content = String(result.content || "");
 
-    return {
-      id: String(result.id),
-      title: String(result.title || "Untitled"),
-      type: result.type as "note" | "pack",
-      snippet: createSnippet(content, trimmedQuery),
-      score: result.score,
-      noteId: result.noteId ? String(result.noteId) : undefined,
-      packId: result.packId ? String(result.packId) : undefined,
-      documentName: result.documentName
-        ? String(result.documentName)
-        : undefined,
-    };
+      return {
+        id: String(result.id),
+        title: String(result.title || "Untitled"),
+        type: result.type as "note" | "pack",
+        snippet: createSnippet(content, trimmedQuery),
+        score: result.score,
+        noteId: result.noteId ? String(result.noteId) : undefined,
+        packId: result.packId ? String(result.packId) : undefined,
+        documentName: result.documentName
+          ? String(result.documentName)
+          : undefined,
+      };
+    });
   });
 };

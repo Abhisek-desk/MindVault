@@ -1,4 +1,8 @@
-import { db, type LocalPack } from "./database";
+import {
+  db,
+  withDatabaseLease,
+  type LocalPack,
+} from "./database";
 
 // =====================================
 // VALIDATE PACK ID
@@ -86,7 +90,10 @@ export const saveLocalPack = async (
   pack: LocalPack,
 ): Promise<void> => {
   validatePack(pack);
-  await db.packs.put(pack);
+
+  await withDatabaseLease(async () => {
+    await db.packs.put(pack);
+  });
 };
 
 // =====================================
@@ -94,7 +101,9 @@ export const saveLocalPack = async (
 // =====================================
 
 export const getLocalPacks = async (): Promise<LocalPack[]> => {
-  return db.packs.toArray();
+  return withDatabaseLease(async () => {
+    return db.packs.toArray();
+  });
 };
 
 // =====================================
@@ -105,7 +114,10 @@ export const getLocalPackById = async (
   id: string,
 ): Promise<LocalPack | undefined> => {
   validatePackId(id);
-  return db.packs.get(id);
+
+  return withDatabaseLease(async () => {
+    return db.packs.get(id);
+  });
 };
 
 // =====================================
@@ -116,7 +128,10 @@ export const isPackDownloaded = async (
   id: string,
 ): Promise<boolean> => {
   validatePackId(id);
-  return (await db.packs.get(id)) !== undefined;
+
+  return withDatabaseLease(async () => {
+    return (await db.packs.get(id)) !== undefined;
+  });
 };
 
 // =====================================
@@ -127,7 +142,10 @@ export const deleteLocalPack = async (
   id: string,
 ): Promise<void> => {
   validatePackId(id);
-  await db.packs.delete(id);
+
+  await withDatabaseLease(async () => {
+    await db.packs.delete(id);
+  });
 };
 
 // =====================================
@@ -135,5 +153,7 @@ export const deleteLocalPack = async (
 // =====================================
 
 export const getLocalPackCount = async (): Promise<number> => {
-  return db.packs.count();
+  return withDatabaseLease(async () => {
+    return db.packs.count();
+  });
 };

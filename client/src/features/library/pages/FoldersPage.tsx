@@ -1,9 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   Folder,
@@ -21,14 +16,11 @@ import DashboardHeader from "../../dashboard/components/DashboardHeader";
 
 import {
   createLocalFolder,
-  getLocalFolders,
   updateLocalFolder,
-  deleteLocalFolder,
+  deleteLocalFolderAndUnassignNotes,
 } from "../../../db/folder.db";
 
-import { updateLocalNote } from "../../../db/note.db";
-
-import { db, type LocalFolder } from "../../../db/database";
+import { db, withDatabaseLease, type LocalFolder } from "../../../db/database";
 
 const folderColors = [
   "#F47768",
@@ -47,8 +39,7 @@ function FoldersPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const [editingFolder, setEditingFolder] =
-    useState<LocalFolder | null>(null);
+  const [editingFolder, setEditingFolder] = useState<LocalFolder | null>(null);
 
   const [folderName, setFolderName] = useState("");
   const [folderColor, setFolderColor] = useState(folderColors[0]);
@@ -62,10 +53,9 @@ function FoldersPage() {
 
   const loadFolders = useCallback(async () => {
     try {
-      const [localFolders, notes] = await Promise.all([
-        getLocalFolders(),
-        db.notes.toArray(),
-      ]);
+      const [localFolders, notes] = await withDatabaseLease(() =>
+        Promise.all([db.folders.toArray(), db.notes.toArray()]),
+      );
 
       setFolders(localFolders);
 
@@ -73,8 +63,7 @@ function FoldersPage() {
 
       notes.forEach((note) => {
         if (note.folderId) {
-          counts[note.folderId] =
-            (counts[note.folderId] || 0) + 1;
+          counts[note.folderId] = (counts[note.folderId] || 0) + 1;
         }
       });
 
@@ -85,42 +74,40 @@ function FoldersPage() {
   }, []);
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  const loadInitialFolders = async () => {
-    try {
-      const [localFolders, notes] = await Promise.all([
-        getLocalFolders(),
-        db.notes.toArray(),
-      ]);
+    const loadInitialFolders = async () => {
+      try {
+        const [localFolders, notes] = await withDatabaseLease(() =>
+          Promise.all([db.folders.toArray(), db.notes.toArray()]),
+        );
 
-      if (cancelled) return;
+        if (cancelled) return;
 
-      setFolders(localFolders);
+        setFolders(localFolders);
 
-      const counts: Record<string, number> = {};
+        const counts: Record<string, number> = {};
 
-      notes.forEach((note) => {
-        if (note.folderId) {
-          counts[note.folderId] =
-            (counts[note.folderId] || 0) + 1;
+        notes.forEach((note) => {
+          if (note.folderId) {
+            counts[note.folderId] = (counts[note.folderId] || 0) + 1;
+          }
+        });
+
+        setNoteCounts(counts);
+      } catch {
+        if (!cancelled) {
+          setError("Unable to load folders.");
         }
-      });
-
-      setNoteCounts(counts);
-    } catch {
-      if (!cancelled) {
-        setError("Unable to load folders.");
       }
-    }
-  };
+    };
 
-  void loadInitialFolders();
+    void loadInitialFolders();
 
-  return () => {
-    cancelled = true;
-  };
-}, []);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // =====================================
   // FILTER FOLDERS
@@ -160,9 +147,7 @@ function FoldersPage() {
   // SAVE FOLDER
   // =====================================
 
-  const handleSaveFolder = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleSaveFolder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     if (!folderName.trim()) {
@@ -186,11 +171,7 @@ function FoldersPage() {
       setIsModalOpen(false);
       await loadFolders();
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save folder.",
-      );
+      setError(err instanceof Error ? err.message : "Unable to save folder.");
     } finally {
       setIsSaving(false);
     }
@@ -201,56 +182,35 @@ function FoldersPage() {
   // =====================================
 
   const handleDeleteFolder = async (folder: LocalFolder) => {
-    const count = noteCounts[folder.id] || 0;
+  const count = noteCounts[folder.id] || 0;
 
-    const message =
-      count > 0
-        ? `Delete "${folder.name}"? Its ${count} note(s) will be moved to unfiled notes.`
-        : `Delete "${folder.name}"?`;
+  const message =
+    count > 0
+      ? `Delete "${folder.name}"? Its ${count} note(s) will be moved to unfiled notes.`
+      : `Delete "${folder.name}"?`;
 
-    if (!window.confirm(message)) {
-      return;
-    }
+  if (!window.confirm(message)) {
+    return;
+  }
 
-    try {
-      // Move notes out of the folder before deleting it.
-      const notes = await db.notes
-        .where("folderId")
-        .equals(folder.id)
-        .toArray();
-
-      for (const note of notes) {
-        await updateLocalNote(note.id, {
-          folderId: null,
-        });
-      }
-
-      await deleteLocalFolder(folder.id);
-      await loadFolders();
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to delete folder.",
-      );
-    }
-  };
+  try {
+    await deleteLocalFolderAndUnassignNotes(folder.id);
+    await loadFolders();
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Unable to delete folder.");
+  }
+};
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5]">
       {/* SIDEBAR */}
 
-      <Sidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
-      />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
       {/* MAIN CONTENT */}
 
       <main className="min-w-0 flex-1">
-        <DashboardHeader
-          onMenuClick={() => setIsSidebarOpen(true)}
-        />
+        <DashboardHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
         <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
           {/* PAGE HEADING */}
@@ -261,9 +221,7 @@ function FoldersPage() {
                 ORGANIZE YOUR KNOWLEDGE
               </p>
 
-              <h1 className="text-3xl font-bold text-[#17243D]">
-                My Folders
-              </h1>
+              <h1 className="text-3xl font-bold text-[#17243D]">My Folders</h1>
 
               <p className="mt-2 text-sm text-gray-500">
                 Organize your notes into meaningful collections.
@@ -306,9 +264,7 @@ function FoldersPage() {
             </div>
 
             <div className="rounded-xl bg-[#FFFAF1] px-5 py-3 text-sm text-gray-600">
-              <span className="font-bold text-[#17243D]">
-                {folders.length}
-              </span>{" "}
+              <span className="font-bold text-[#17243D]">{folders.length}</span>{" "}
               {folders.length === 1 ? "Folder" : "Folders"}
             </div>
           </div>
@@ -390,11 +346,7 @@ function FoldersPage() {
           ) : (
             <div className="rounded-2xl border border-dashed border-[#17243D]/15 bg-[#FFFAF1] px-6 py-20 text-center">
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#F47768]/10 text-[#F47768]">
-                {search ? (
-                  <Search size={30} />
-                ) : (
-                  <FolderOpen size={30} />
-                )}
+                {search ? <Search size={30} /> : <FolderOpen size={30} />}
               </div>
 
               <h3 className="text-xl font-bold text-[#17243D]">
@@ -482,11 +434,7 @@ function FoldersPage() {
                 ))}
               </div>
 
-              {error && (
-                <p className="mt-4 text-sm text-red-500">
-                  {error}
-                </p>
-              )}
+              {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
 
               <div className="mt-8 flex gap-3">
                 <button

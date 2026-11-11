@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom";
+
 import { useAuthStore } from "../../../stores/auth.store";
 import PageMetadata from "../../../components/common/PageMetadata";
 
@@ -11,7 +12,11 @@ function ProtectedRoute() {
     (state) => state.isLoading
   );
 
-  if (isLoading) {
+  const isDatabaseReady = useAuthStore(
+    (state) => state.isDatabaseReady
+  );
+
+  if (isLoading || (isAuthenticated && !isDatabaseReady)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F8F1E5]">
         <div className="text-center">

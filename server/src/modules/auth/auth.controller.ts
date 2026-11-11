@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { randomUUID, createHash, timingSafeEqual } from "crypto";
+import mongoose from "mongoose";
 
 import { User } from "../users/user.model";
 import { registerSchema, loginSchema } from "./auth.validation";
@@ -33,19 +34,12 @@ const getRefreshSecret = (): string => {
 };
 
 // ========================================
-// REFRESH TOKEN HASHING
+// TOKEN HELPERS
 // ========================================
 
-// SHA-256 hashes the entire refresh token.
-// Unlike bcrypt, SHA-256 does not truncate long JWTs.
-
 const hashRefreshToken = (token: string): string => {
-  return createHash("sha256")
-    .update(token, "utf8")
-    .digest("hex");
+  return createHash("sha256").update(token, "utf8").digest("hex");
 };
-
-// Compare hashes using constant-time comparison.
 
 const verifyRefreshToken = (
   token: string,
@@ -58,17 +52,41 @@ const verifyRefreshToken = (
     return false;
   }
 
-  const incomingHash = Buffer.from(
-    hashRefreshToken(token),
-    "hex",
-  );
-
-  const existingHash = Buffer.from(
-    storedHash,
-    "hex",
-  );
+  const incomingHash = Buffer.from(hashRefreshToken(token), "hex");
+  const existingHash = Buffer.from(storedHash, "hex");
 
   return timingSafeEqual(incomingHash, existingHash);
+};
+
+const isValidSessionPayload = (
+  decoded: jwt.JwtPayload,
+): decoded is jwt.JwtPayload & {
+  sub: string;
+  ver: number;
+} => {
+  return (
+    typeof decoded.sub === "string" &&
+    mongoose.isValidObjectId(decoded.sub) &&
+    typeof decoded.ver === "number" &&
+    Number.isSafeInteger(decoded.ver) &&
+    decoded.ver >= 0
+  );
+};
+
+// Supports users created before sessionVersion was added.
+const getSessionVersionFilter = (version: number) => {
+  if (version === 0) {
+    return {
+      $or: [
+        { sessionVersion: 0 },
+        { sessionVersion: { $exists: false } },
+      ],
+    };
+  }
+
+  return {
+    sessionVersion: version,
+  };
 };
 
 // ========================================
@@ -84,6 +102,11 @@ const accessCookieOptions = {
 
 const refreshCookieOptions = {
   ...accessCookieOptions,
+  path: "/api/v1/auth",
+};
+
+const legacyRefreshCookieOptions = {
+  ...accessCookieOptions,
   path: "/api/v1/auth/refresh",
 };
 
@@ -91,10 +114,14 @@ const refreshCookieOptions = {
 // CREATE TOKENS
 // ========================================
 
-const createTokens = (userId: string) => {
+const createTokens = (
+  userId: string,
+  sessionVersion: number,
+) => {
   const accessToken = jwt.sign(
     {
       sub: userId,
+      ver: sessionVersion,
     },
     getAccessSecret(),
     {
@@ -106,6 +133,7 @@ const createTokens = (userId: string) => {
   const refreshToken = jwt.sign(
     {
       sub: userId,
+      ver: sessionVersion,
       jti: randomUUID(),
     },
     getRefreshSecret(),
@@ -130,6 +158,9 @@ const setAuthCookies = (
   accessToken: string,
   refreshToken: string,
 ) => {
+  // Remove the old, narrower refresh-cookie path.
+  res.clearCookie("refreshToken", legacyRefreshCookieOptions);
+
   res.cookie("accessToken", accessToken, {
     ...accessCookieOptions,
     maxAge: 15 * 60 * 1000,
@@ -147,8 +178,8 @@ const setAuthCookies = (
 
 const clearAuthCookies = (res: Response) => {
   res.clearCookie("accessToken", accessCookieOptions);
-
   res.clearCookie("refreshToken", refreshCookieOptions);
+  res.clearCookie("refreshToken", legacyRefreshCookieOptions);
 };
 
 // ========================================
@@ -165,18 +196,23 @@ export const register = async (
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid registration details",
+        message: "Invalid registration data",
       });
     }
 
-    const { name, email, password } = result.data;
+    const {
+      name,
+      email,
+      password,
+      preferredLanguage,
+    } = result.data;
 
     const existingUser = await User.findOne({ email });
 
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        message: "Email is already registered",
+        message: "An account with this email already exists",
       });
     }
 
@@ -186,11 +222,14 @@ export const register = async (
       name,
       email,
       passwordHash,
+      preferredLanguage,
     });
 
-    const tokens = createTokens(user.id);
+    const tokens = createTokens(
+      user.id,
+      user.sessionVersion,
+    );
 
-    // Store SHA-256 hash of the refresh token.
     user.refreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
     );
@@ -213,15 +252,16 @@ export const register = async (
         preferredLanguage: user.preferredLanguage,
       },
     });
-  } catch (error: any) {
-    if (error.code === 11000) {
+  } catch (error) {
+    if (
+      error instanceof mongoose.Error.ValidationError ||
+      (error as { code?: number })?.code === 11000
+    ) {
       return res.status(409).json({
         success: false,
-        message: "Email is already registered",
+        message: "An account with this email already exists",
       });
     }
-
-    console.error("Registration error:", error);
 
     return res.status(500).json({
       success: false,
@@ -244,14 +284,14 @@ export const login = async (
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: "Invalid login details",
+        message: "Invalid login data",
       });
     }
 
     const { email, password } = result.data;
 
     const user = await User.findOne({ email }).select(
-      "+passwordHash +refreshTokenHash",
+      "+passwordHash",
     );
 
     if (!user) {
@@ -273,14 +313,54 @@ export const login = async (
       });
     }
 
-    const tokens = createTokens(user.id);
+    // Atomically establish a new session version.
+    const sessionUser = await User.findOneAndUpdate(
+      { _id: user._id },
+      {
+        $inc: { sessionVersion: 1 },
+        $unset: { refreshTokenHash: 1 },
+      },
+      {
+        returnDocument: "after",
+        runValidators: true,
+      },
+    );
 
-    // Replace any previous refresh session.
-    user.refreshTokenHash = hashRefreshToken(
+    if (!sessionUser) {
+      return res.status(401).json({
+        success: false,
+        message: "User account is no longer available",
+      });
+    }
+
+    const tokens = createTokens(
+      sessionUser.id,
+      sessionUser.sessionVersion,
+    );
+
+    const newRefreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
     );
 
-    await user.save();
+    // Only the latest login can store its refresh token.
+    const sessionResult = await User.updateOne(
+      {
+        _id: sessionUser._id,
+        sessionVersion: sessionUser.sessionVersion,
+      },
+      {
+        $set: {
+          refreshTokenHash: newRefreshTokenHash,
+        },
+      },
+    );
+
+    if (sessionResult.modifiedCount !== 1) {
+      return res.status(409).json({
+        success: false,
+        message: "A newer login has replaced this session. Please try again.",
+      });
+    }
 
     setAuthCookies(
       res,
@@ -292,15 +372,13 @@ export const login = async (
       success: true,
       message: "Login successful",
       user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        preferredLanguage: user.preferredLanguage,
+        id: sessionUser.id,
+        name: sessionUser.name,
+        email: sessionUser.email,
+        preferredLanguage: sessionUser.preferredLanguage,
       },
     });
-  } catch (error) {
-    console.error("Login error:", error);
-
+  } catch {
     return res.status(500).json({
       success: false,
       message: "Login failed",
@@ -336,7 +414,7 @@ export const refresh = async (
       },
     ) as jwt.JwtPayload;
 
-    if (typeof decoded.sub !== "string") {
+    if (!isValidSessionPayload(decoded)) {
       clearAuthCookies(res);
 
       return res.status(401).json({
@@ -349,39 +427,45 @@ export const refresh = async (
       decoded.sub,
     ).select("+refreshTokenHash");
 
-    if (!user || !user.refreshTokenHash) {
+    if (
+      !user ||
+      !user.refreshTokenHash ||
+      user.sessionVersion !== decoded.ver
+    ) {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Invalid refresh session",
+        message: "Session has been invalidated",
       });
     }
 
     const previousHash = user.refreshTokenHash;
 
-    // Verify the complete refresh token.
     if (!verifyRefreshToken(token, previousHash)) {
       clearAuthCookies(res);
 
       return res.status(401).json({
         success: false,
-        message: "Refresh session expired",
+        message: "Invalid refresh token",
       });
     }
 
-    const tokens = createTokens(user.id);
+    const tokens = createTokens(
+      user.id,
+      user.sessionVersion,
+    );
 
     const newRefreshTokenHash = hashRefreshToken(
       tokens.refreshToken,
     );
 
-    // Atomic compare-and-swap.
-    // Only one concurrent request can rotate this token.
+    // Atomic compare-and-swap prevents concurrent reuse.
     const rotationResult = await User.updateOne(
       {
         _id: user._id,
         refreshTokenHash: previousHash,
+        ...getSessionVersionFilter(decoded.ver),
       },
       {
         $set: {
@@ -395,7 +479,7 @@ export const refresh = async (
 
       return res.status(401).json({
         success: false,
-        message: "Refresh session has already been used",
+        message: "Refresh token has already been used",
       });
     }
 
@@ -412,21 +496,16 @@ export const refresh = async (
   } catch (error) {
     clearAuthCookies(res);
 
-    if (
-      error instanceof jwt.JsonWebTokenError ||
-      error instanceof jwt.TokenExpiredError
-    ) {
+    if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({
         success: false,
-        message: "Session expired",
+        message: "Invalid or expired refresh token",
       });
     }
 
-    console.error("Refresh error:", error);
-
     return res.status(500).json({
       success: false,
-      message: "Could not refresh session",
+      message: "Session refresh failed",
     });
   }
 };
@@ -475,12 +554,81 @@ export const logout = async (
   res: Response,
 ) => {
   try {
-    if (req.userId) {
+    const accessToken = req.cookies?.accessToken;
+    const refreshToken = req.cookies?.refreshToken;
+
+    let userId: string | null = null;
+    let sessionVersion: number | null = null;
+    let accessTokenIdentifiedSession = false;
+
+    // A signed access token can identify its session for logout,
+    // even when its 15-minute expiry has passed.
+    if (accessToken) {
+      try {
+        const decoded = jwt.verify(
+          accessToken,
+          getAccessSecret(),
+          {
+            algorithms: [JWT_ALGORITHM],
+            ignoreExpiration: true,
+          },
+        ) as jwt.JwtPayload;
+
+        if (isValidSessionPayload(decoded)) {
+          userId = decoded.sub;
+          sessionVersion = decoded.ver;
+          accessTokenIdentifiedSession = true;
+        }
+      } catch {
+        // Fall back to refresh-token verification.
+      }
+    }
+
+    // Use the refresh token only when no valid access-token
+    // identity was established. Its stored hash must match.
+    if (!accessTokenIdentifiedSession && refreshToken) {
+      try {
+        const decoded = jwt.verify(
+          refreshToken,
+          getRefreshSecret(),
+          {
+            algorithms: [JWT_ALGORITHM],
+          },
+        ) as jwt.JwtPayload;
+
+        if (isValidSessionPayload(decoded)) {
+          const user = await User.findById(
+            decoded.sub,
+          ).select("+refreshTokenHash");
+
+          if (
+            user &&
+            user.refreshTokenHash &&
+            user.sessionVersion === decoded.ver &&
+            verifyRefreshToken(
+              refreshToken,
+              user.refreshTokenHash,
+            )
+          ) {
+            userId = decoded.sub;
+            sessionVersion = decoded.ver;
+          }
+        }
+      } catch {
+        // Invalid or expired refresh tokens cannot identify a session.
+      }
+    }
+
+    if (userId && sessionVersion !== null) {
       await User.updateOne(
         {
-          _id: req.userId,
+          _id: userId,
+          ...getSessionVersionFilter(sessionVersion),
         },
         {
+          $inc: {
+            sessionVersion: 1,
+          },
           $unset: {
             refreshTokenHash: 1,
           },

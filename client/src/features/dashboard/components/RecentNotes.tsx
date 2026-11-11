@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { FileText, ArrowRight, Clock, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import { db } from "../../../db/database";
+import { db, withDatabaseLease } from "../../../db/database";
 import type { LocalNote } from "../../../db/database";
 
 function RecentNotes() {
@@ -17,11 +17,9 @@ function RecentNotes() {
 
     const loadRecentNotes = async () => {
       try {
-        const notes = await db.notes
-          .orderBy("updatedAt")
-          .reverse()
-          .limit(5)
-          .toArray();
+        const notes = await withDatabaseLease(async () => {
+          return db.notes.orderBy("updatedAt").reverse().limit(5).toArray();
+        });
 
         if (mounted) {
           setRecentNotes(notes);

@@ -26,6 +26,7 @@ export interface AuthState {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isDatabaseReady: boolean;
 
   register: (data: RegisterData) => Promise<void>;
   login: (data: LoginData) => Promise<void>;

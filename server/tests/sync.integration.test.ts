@@ -27,6 +27,35 @@ import { Note } from "../src/modules/notes/note.model";
 import { Folder } from "../src/modules/folders/folder.model";
 import { SyncChange } from "../src/modules/sync/sync.model";
 
+// ========================================
+// COOKIE HELPER
+// ========================================
+
+const getNonEmptyCookie = (
+  cookies: string[] | undefined,
+  name: string,
+): string | undefined => {
+  const prefix = `${name}=`;
+
+  const cookie = cookies?.find((item) => {
+    if (!item.startsWith(prefix)) {
+      return false;
+    }
+
+    const value = item
+      .slice(prefix.length)
+      .split(";")[0];
+
+    return value.length > 0;
+  });
+
+  return cookie?.split(";")[0];
+};
+
+// ========================================
+// INTEGRATION TESTS
+// ========================================
+
 describe("Mind Vault Synchronization Integration Tests", () => {
   let replicaSet: MongoMemoryReplSet;
 
@@ -38,16 +67,17 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   let agent: ReturnType<typeof request.agent>;
   let originalRefreshCookie = "";
+  let originalAccessCookie = "";
 
   beforeAll(async () => {
-    process.env.JWT_ACCESS_SECRET = "integration-test-access-secret-123456789";
+    process.env.JWT_ACCESS_SECRET =
+      "integration-test-access-secret-123456789";
 
     process.env.JWT_REFRESH_SECRET =
       "integration-test-refresh-secret-123456789";
 
     process.env.NODE_ENV = "test";
 
-    // Start isolated MongoDB replica set.
     replicaSet = await MongoMemoryReplSet.create({
       replSet: {
         count: 1,
@@ -56,9 +86,10 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
     await mongoose.connect(replicaSet.getUri());
 
-    // Ensure database indexes are initialized.
     await Promise.all(
-      Object.values(mongoose.connection.models).map((model) => model.init()),
+      Object.values(mongoose.connection.models).map((model) =>
+        model.init(),
+      ),
     );
 
     agent = request.agent(app);
@@ -80,25 +111,46 @@ describe("Mind Vault Synchronization Integration Tests", () => {
       SyncChange.deleteMany({}),
     ]);
 
-    // Register a fresh user for each test.
     const registrationResponse = await agent
       .post("/api/v1/auth/register")
       .send(testUser)
       .expect(201);
 
-    // Capture the original refresh token for security tests.
-    const cookies = registrationResponse.headers["set-cookie"] ?? [];
+    const cookies =
+      registrationResponse.headers["set-cookie"] ?? [];
 
-    const refreshCookie = cookies.find((cookie) =>
-      cookie.startsWith("refreshToken="),
+    // Extract only the actual non-empty refresh cookie.
+    const refreshCookie = getNonEmptyCookie(
+      cookies,
+      "refreshToken",
     );
 
     if (!refreshCookie) {
-      throw new Error("Registration did not return a refresh token cookie.");
+      throw new Error(
+        "Registration did not return a refresh token cookie.",
+      );
     }
 
-    originalRefreshCookie = refreshCookie.split(";")[0];
+    originalRefreshCookie = refreshCookie;
+
+    // Extract the actual access cookie.
+    const accessCookie = getNonEmptyCookie(
+      cookies,
+      "accessToken",
+    );
+
+    if (!accessCookie) {
+      throw new Error(
+        "Registration did not return an access token cookie.",
+      );
+    }
+
+    originalAccessCookie = accessCookie;
   });
+
+  // ========================================
+  // HELPER FUNCTIONS
+  // ========================================
 
   const createFolder = (
     folderId: string,
@@ -121,7 +173,11 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
   };
 
-  const createNote = (noteId: string, mutationId: string, folderId: string) => {
+  const createNote = (
+    noteId: string,
+    mutationId: string,
+    folderId: string,
+  ) => {
     return agent.post("/api/v1/sync/push").send({
       changes: [
         {
@@ -154,7 +210,9 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should register and authenticate a user", async () => {
-      const response = await agent.get("/api/v1/auth/me").expect(200);
+      const response = await agent
+        .get("/api/v1/auth/me")
+        .expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.body.user.email).toBe(testUser.email);
@@ -170,6 +228,57 @@ describe("Mind Vault Synchronization Integration Tests", () => {
         .expect(401);
     });
 
+    it("should safely handle concurrent login attempts", async () => {
+      const loginRequests = await Promise.all([
+        request(app)
+          .post("/api/v1/auth/login")
+          .send(testUser),
+
+        request(app)
+          .post("/api/v1/auth/login")
+          .send(testUser),
+      ]);
+
+      const user = await User.findOne({
+        email: testUser.email,
+      }).select("+refreshTokenHash");
+
+      expect(user).not.toBeNull();
+
+      expect(user?.sessionVersion).toBe(2);
+      expect(user?.refreshTokenHash).toBeDefined();
+
+      // Only one returned refresh token can match
+      // the hash currently stored in MongoDB.
+      const matchingTokens = loginRequests.flatMap((response) => {
+        const cookies = response.headers["set-cookie"] ?? [];
+
+        const refreshCookie = getNonEmptyCookie(
+          cookies,
+          "refreshToken",
+        );
+
+        if (!refreshCookie) {
+          return [];
+        }
+
+        const token = refreshCookie.replace(
+          "refreshToken=",
+          "",
+        );
+
+        const tokenHash = createHash("sha256")
+          .update(token, "utf8")
+          .digest("hex");
+
+        return tokenHash === user?.refreshTokenHash
+          ? [token]
+          : [];
+      });
+
+      expect(matchingTokens).toHaveLength(1);
+    });
+
     it("should reject login with invalid input", async () => {
       await request(app)
         .post("/api/v1/auth/login")
@@ -181,7 +290,9 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should reject access to protected routes without an access token", async () => {
-      await request(app).get("/api/v1/auth/me").expect(401);
+      await request(app)
+        .get("/api/v1/auth/me")
+        .expect(401);
     });
 
     it("should reject an invalid access token", async () => {
@@ -210,7 +321,9 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should reject refresh requests without a refresh token", async () => {
-      await request(app).post("/api/v1/auth/refresh").expect(401);
+      await request(app)
+        .post("/api/v1/auth/refresh")
+        .expect(401);
     });
 
     it("should reject invalid refresh tokens", async () => {
@@ -221,48 +334,59 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should successfully refresh and rotate tokens", async () => {
-      const response = await agent.post("/api/v1/auth/refresh").expect(200);
+      const response = await agent
+        .post("/api/v1/auth/refresh")
+        .expect(200);
 
       expect(response.body.success).toBe(true);
       expect(response.headers["set-cookie"]).toBeDefined();
 
-      // The rotated session must remain authenticated.
-      await agent.get("/api/v1/auth/me").expect(200);
+      await agent
+        .get("/api/v1/auth/me")
+        .expect(200);
     });
 
     it("should reject reuse of an old refresh token", async () => {
-      // Extract the original refresh token.
-      const oldToken = originalRefreshCookie.replace("refreshToken=", "");
+      const oldToken = originalRefreshCookie.replace(
+        "refreshToken=",
+        "",
+      );
 
       expect(oldToken.length).toBeGreaterThan(50);
 
-      const oldPayload = jwt.decode(oldToken) as jwt.JwtPayload;
+      const oldPayload = jwt.decode(
+        oldToken,
+      ) as jwt.JwtPayload;
 
       // Perform the first refresh.
       const refreshResponse = await agent
         .post("/api/v1/auth/refresh")
         .expect(200);
 
-      // Extract the newly issued refresh cookie.
-      const cookies = refreshResponse.headers["set-cookie"] ?? [];
+      const cookies =
+        refreshResponse.headers["set-cookie"] ?? [];
 
-      const newRefreshCookie = cookies.find((cookie) =>
-        cookie.startsWith("refreshToken="),
+      // Ignore the empty legacy-cookie deletion header.
+      const newRefreshCookie = getNonEmptyCookie(
+        cookies,
+        "refreshToken",
       );
 
       expect(newRefreshCookie).toBeDefined();
 
-      const newToken = newRefreshCookie!
-        .split(";")[0]
-        .replace("refreshToken=", "");
+      const newToken = newRefreshCookie!.replace(
+        "refreshToken=",
+        "",
+      );
 
-      const newPayload = jwt.decode(newToken) as jwt.JwtPayload;
+      const newPayload = jwt.decode(
+        newToken,
+      ) as jwt.JwtPayload;
 
-      // Verify that the new token has a unique JWT ID.
       expect(newPayload.jti).toBeDefined();
+
       expect(newPayload.jti).not.toBe(oldPayload.jti);
 
-      // Retrieve the user's current refresh-token hash.
       const user = await User.findOne({
         email: testUser.email,
       }).select("+refreshTokenHash");
@@ -270,37 +394,40 @@ describe("Mind Vault Synchronization Integration Tests", () => {
       expect(user).not.toBeNull();
       expect(user?.refreshTokenHash).toBeDefined();
 
-      // Compare both tokens against the stored hash.
       const oldTokenStillValid =
-        createHash("sha256").update(oldToken, "utf8").digest("hex") ===
-        user!.refreshTokenHash;
+        createHash("sha256")
+          .update(oldToken, "utf8")
+          .digest("hex") === user!.refreshTokenHash;
 
       const newTokenStillValid =
-        createHash("sha256").update(newToken, "utf8").digest("hex") ===
-        user!.refreshTokenHash;
+        createHash("sha256")
+          .update(newToken, "utf8")
+          .digest("hex") === user!.refreshTokenHash;
 
-      // Temporary diagnostics.
-      console.log("Refresh rotation diagnostics:", {
-        oldAndNewTokensAreDifferent: oldToken !== newToken,
-        oldTokenMatchesStoredHash: oldTokenStillValid,
-        newTokenMatchesStoredHash: newTokenStillValid,
-      });
-
-      // The original token must no longer match.
       expect(oldTokenStillValid).toBe(false);
-
-      // The newly issued token must match.
       expect(newTokenStillValid).toBe(true);
 
-      // Attempt to reuse the original refresh token.
+      // Reusing the old token must fail.
       await request(app)
         .post("/api/v1/auth/refresh")
         .set("Cookie", originalRefreshCookie)
         .expect(401);
     });
 
-    it("should invalidate refresh tokens after logout", async () => {
-      await agent.post("/api/v1/auth/logout").expect(200);
+    it("should immediately invalidate access and refresh tokens after logout", async () => {
+      await request(app)
+        .get("/api/v1/auth/me")
+        .set("Cookie", originalAccessCookie)
+        .expect(200);
+
+      await agent
+        .post("/api/v1/auth/logout")
+        .expect(200);
+
+      await request(app)
+        .get("/api/v1/auth/me")
+        .set("Cookie", originalAccessCookie)
+        .expect(401);
 
       await request(app)
         .post("/api/v1/auth/refresh")
@@ -309,19 +436,21 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should allow only one concurrent refresh using the same token", async () => {
-      const [firstResponse, secondResponse] = await Promise.all([
-        request(app)
-          .post("/api/v1/auth/refresh")
-          .set("Cookie", originalRefreshCookie),
+      const [firstResponse, secondResponse] =
+        await Promise.all([
+          request(app)
+            .post("/api/v1/auth/refresh")
+            .set("Cookie", originalRefreshCookie),
 
-        request(app)
-          .post("/api/v1/auth/refresh")
-          .set("Cookie", originalRefreshCookie),
-      ]);
+          request(app)
+            .post("/api/v1/auth/refresh")
+            .set("Cookie", originalRefreshCookie),
+        ]);
 
-      const statuses = [firstResponse.status, secondResponse.status].sort(
-        (a, b) => a - b,
-      );
+      const statuses = [
+        firstResponse.status,
+        secondResponse.status,
+      ].sort((a, b) => a - b);
 
       expect(statuses).toEqual([200, 401]);
     });
@@ -333,7 +462,8 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Folder synchronization", () => {
     it("should create a folder successfully", async () => {
-      const folderId = new mongoose.Types.ObjectId().toString();
+      const folderId =
+        new mongoose.Types.ObjectId().toString();
 
       const response = await createFolder(
         folderId,
@@ -357,8 +487,11 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Note synchronization", () => {
     it("should create a note inside a folder", async () => {
-      const folderId = new mongoose.Types.ObjectId().toString();
-      const noteId = new mongoose.Types.ObjectId().toString();
+      const folderId =
+        new mongoose.Types.ObjectId().toString();
+
+      const noteId =
+        new mongoose.Types.ObjectId().toString();
 
       await createFolder(
         folderId,
@@ -389,17 +522,25 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Idempotency", () => {
     it("should not process the same mutation twice", async () => {
-      const folderId = new mongoose.Types.ObjectId().toString();
+      const folderId =
+        new mongoose.Types.ObjectId().toString();
 
-      const mutationId = "44444444-4444-4444-8444-444444444444";
+      const mutationId =
+        "44444444-4444-4444-8444-444444444444";
 
-      const firstResponse = await createFolder(folderId, mutationId);
+      const firstResponse = await createFolder(
+        folderId,
+        mutationId,
+      );
 
       expect(firstResponse.status).toBe(200);
       expect(firstResponse.body.processed).toBe(1);
       expect(firstResponse.body.duplicates).toBe(0);
 
-      const secondResponse = await createFolder(folderId, mutationId);
+      const secondResponse = await createFolder(
+        folderId,
+        mutationId,
+      );
 
       expect(secondResponse.status).toBe(200);
       expect(secondResponse.body.processed).toBe(0);
@@ -413,33 +554,39 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should reject duplicate mutation IDs in one batch", async () => {
-      const folderId1 = new mongoose.Types.ObjectId().toString();
-      const folderId2 = new mongoose.Types.ObjectId().toString();
+      const folderId1 =
+        new mongoose.Types.ObjectId().toString();
 
-      const mutationId = "55555555-5555-4555-8555-555555555555";
+      const folderId2 =
+        new mongoose.Types.ObjectId().toString();
 
-      const response = await agent.post("/api/v1/sync/push").send({
-        changes: [
-          {
-            entityType: "folder",
-            entityId: folderId1,
-            operation: "create",
-            clientMutationId: mutationId,
-            data: {
-              name: "First Folder",
+      const mutationId =
+        "55555555-5555-4555-8555-555555555555";
+
+      const response = await agent
+        .post("/api/v1/sync/push")
+        .send({
+          changes: [
+            {
+              entityType: "folder",
+              entityId: folderId1,
+              operation: "create",
+              clientMutationId: mutationId,
+              data: {
+                name: "First Folder",
+              },
             },
-          },
-          {
-            entityType: "folder",
-            entityId: folderId2,
-            operation: "create",
-            clientMutationId: mutationId,
-            data: {
-              name: "Second Folder",
+            {
+              entityType: "folder",
+              entityId: folderId2,
+              operation: "create",
+              clientMutationId: mutationId,
+              data: {
+                name: "Second Folder",
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
 
       expect(response.status).toBe(400);
       expect(response.body.success).toBe(false);
@@ -454,42 +601,51 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Optimistic concurrency control", () => {
     it("should reject an update with a stale note version", async () => {
-      const noteId = new mongoose.Types.ObjectId().toString();
+      const noteId =
+        new mongoose.Types.ObjectId().toString();
 
-      const response = await agent.post("/api/v1/sync/push").send({
-        changes: [
-          {
-            entityType: "note",
-            entityId: noteId,
-            operation: "create",
-            clientMutationId: "66666666-6666-4666-8666-666666666666",
-            data: {
-              title: "Original Note",
-              content: "Original content",
+      const response = await agent
+        .post("/api/v1/sync/push")
+        .send({
+          changes: [
+            {
+              entityType: "note",
+              entityId: noteId,
+              operation: "create",
+              clientMutationId:
+                "66666666-6666-4666-8666-666666666666",
+              data: {
+                title: "Original Note",
+                content: "Original content",
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
 
       expect(response.status).toBe(200);
 
-      const updateResponse = await agent.post("/api/v1/sync/push").send({
-        changes: [
-          {
-            entityType: "note",
-            entityId: noteId,
-            operation: "update",
-            clientMutationId: "77777777-7777-4777-8777-777777777777",
-            expectedVersion: 5,
-            data: {
-              title: "Updated Note",
+      const updateResponse = await agent
+        .post("/api/v1/sync/push")
+        .send({
+          changes: [
+            {
+              entityType: "note",
+              entityId: noteId,
+              operation: "update",
+              clientMutationId:
+                "77777777-7777-4777-8777-777777777777",
+              expectedVersion: 5,
+              data: {
+                title: "Updated Note",
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
 
       expect(updateResponse.status).toBe(409);
-      expect(updateResponse.body.code).toBe("NOTE_VERSION_CONFLICT");
+      expect(updateResponse.body.code).toBe(
+        "NOTE_VERSION_CONFLICT",
+      );
 
       const note = await Note.findById(noteId);
 
@@ -498,21 +654,25 @@ describe("Mind Vault Synchronization Integration Tests", () => {
     });
 
     it("should reject updates without an expected version", async () => {
-      const noteId = new mongoose.Types.ObjectId().toString();
+      const noteId =
+        new mongoose.Types.ObjectId().toString();
 
-      const response = await agent.post("/api/v1/sync/push").send({
-        changes: [
-          {
-            entityType: "note",
-            entityId: noteId,
-            operation: "update",
-            clientMutationId: "88888888-8888-4888-8888-888888888888",
-            data: {
-              title: "Updated Note",
+      const response = await agent
+        .post("/api/v1/sync/push")
+        .send({
+          changes: [
+            {
+              entityType: "note",
+              entityId: noteId,
+              operation: "update",
+              clientMutationId:
+                "88888888-8888-4888-8888-888888888888",
+              data: {
+                title: "Updated Note",
+              },
             },
-          },
-        ],
-      });
+          ],
+        });
 
       expect(response.status).toBe(400);
     });
@@ -524,8 +684,11 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Pull synchronization", () => {
     it("should retrieve changes using a cursor", async () => {
-      const folderId1 = new mongoose.Types.ObjectId().toString();
-      const folderId2 = new mongoose.Types.ObjectId().toString();
+      const folderId1 =
+        new mongoose.Types.ObjectId().toString();
+
+      const folderId2 =
+        new mongoose.Types.ObjectId().toString();
 
       await createFolder(
         folderId1,
@@ -556,7 +719,9 @@ describe("Mind Vault Synchronization Integration Tests", () => {
       expect(secondResponse.body.count).toBe(1);
       expect(secondResponse.body.hasMore).toBe(false);
 
-      expect(secondResponse.body.changes[0].entityId).not.toBe(
+      expect(
+        secondResponse.body.changes[0].entityId,
+      ).not.toBe(
         firstResponse.body.changes[0].entityId,
       );
     });
@@ -568,8 +733,11 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
   describe("Folder membership protection", () => {
     it("should reject deletion of a non-empty folder and roll back its lock", async () => {
-      const folderId = new mongoose.Types.ObjectId().toString();
-      const noteId = new mongoose.Types.ObjectId().toString();
+      const folderId =
+        new mongoose.Types.ObjectId().toString();
+
+      const noteId =
+        new mongoose.Types.ObjectId().toString();
 
       await createFolder(
         folderId,
@@ -582,17 +750,20 @@ describe("Mind Vault Synchronization Integration Tests", () => {
         folderId,
       ).expect(200);
 
-      const response = await agent.post("/api/v1/sync/push").send({
-        changes: [
-          {
-            entityType: "folder",
-            entityId: folderId,
-            operation: "delete",
-            clientMutationId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
-            expectedVersion: 1,
-          },
-        ],
-      });
+      const response = await agent
+        .post("/api/v1/sync/push")
+        .send({
+          changes: [
+            {
+              entityType: "folder",
+              entityId: folderId,
+              operation: "delete",
+              clientMutationId:
+                "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+              expectedVersion: 1,
+            },
+          ],
+        });
 
       expect(response.status).toBe(409);
       expect(response.body.code).toBe("FOLDER_NOT_EMPTY");
@@ -601,10 +772,11 @@ describe("Mind Vault Synchronization Integration Tests", () => {
 
       expect(folder).not.toBeNull();
 
-      // Failed transaction must not leave the lock incremented.
       expect(folder?.membershipRevision).toBe(1);
 
-      expect(await Note.exists({ _id: noteId })).not.toBeNull();
+      expect(
+        await Note.exists({ _id: noteId }),
+      ).not.toBeNull();
     });
   });
 });

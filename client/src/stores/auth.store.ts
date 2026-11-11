@@ -12,7 +12,19 @@ import {
 
 import { ApiError } from "../services/api";
 
+import { initializeUserDatabase, closeUserDatabase } from "../db/database";
+
+import { withAccountSessionLock } from "../services/account-session-lock";
+
 const AUTH_CACHE_KEY = "mindvault_offline_user";
+const AUTH_CHANNEL_NAME = "mindvault-auth";
+const AUTH_LOGOUT_PENDING_KEY = "mindvault_logout_pending";
+
+let authenticationGeneration = 0;
+
+// =====================================
+// AUTHENTICATION CACHE
+// =====================================
 
 function saveCachedUser(user: AuthUser): void {
   try {
@@ -28,9 +40,7 @@ function getCachedUser(): AuthUser | null {
   try {
     const stored = localStorage.getItem(AUTH_CACHE_KEY);
 
-    if (!stored) {
-      return null;
-    }
+    if (!stored) return null;
 
     const user = JSON.parse(stored) as AuthUser;
 
@@ -66,6 +76,31 @@ function clearCachedUser(): void {
   }
 }
 
+// =====================================
+// PENDING LOGOUT PROTECTION
+// =====================================
+
+function hasPendingLogout(): boolean {
+  try {
+    return localStorage.getItem(AUTH_LOGOUT_PENDING_KEY) === "true";
+  } catch {
+    // Fail closed if storage cannot be checked.
+    return true;
+  }
+}
+
+function setPendingLogout(): void {
+  localStorage.setItem(AUTH_LOGOUT_PENDING_KEY, "true");
+}
+
+function clearPendingLogout(): void {
+  localStorage.removeItem(AUTH_LOGOUT_PENDING_KEY);
+}
+
+// =====================================
+// AUTHENTICATION HELPERS
+// =====================================
+
 function isAuthenticationError(error: unknown): boolean {
   return (
     error instanceof ApiError && (error.status === 401 || error.status === 403)
@@ -78,149 +113,393 @@ function isServerOrNetworkError(error: unknown): boolean {
   );
 }
 
+async function activateUserDatabase(user: AuthUser): Promise<void> {
+  await initializeUserDatabase(user.id);
+}
+
+// =====================================
+// CROSS-TAB NOTIFICATIONS
+// =====================================
+
+function notifyOtherTabs(): void {
+  try {
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+
+      channel.postMessage({ type: "SESSION_CHANGED" });
+
+      channel.close();
+    }
+
+    localStorage.setItem(
+      `${AUTH_CACHE_KEY}_event`,
+      `${Date.now()}-${Math.random()}`,
+    );
+  } catch {
+    if (import.meta.env.DEV) {
+      console.error("Could not notify other browser tabs.");
+    }
+  }
+}
+
+// =====================================
+// AUTHENTICATION STORE
+// =====================================
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true,
+  isDatabaseReady: false,
 
+  // =================================
   // REGISTER
+  // =================================
+
   register: async (data) => {
-    const user = await registerUser(data);
-
-    saveCachedUser(user);
+    const generation = ++authenticationGeneration;
 
     set({
-      user,
-      isAuthenticated: true,
+      user: null,
+      isAuthenticated: false,
+      isDatabaseReady: false,
+      isLoading: true,
     });
-  },
 
-  // LOGIN
-  login: async (data) => {
-    const user = await loginUser(data);
-
-    saveCachedUser(user);
-
-    set({
-      user,
-      isAuthenticated: true,
-    });
-  },
-
-  // LOGOUT
-  logout: async () => {
     try {
-      if (navigator.onLine) {
-        await logoutUser();
+      await withAccountSessionLock(async () => {
+        const user = await registerUser(data);
+
+        if (generation !== authenticationGeneration) return;
+
+        clearPendingLogout();
+        clearCachedUser();
+
+        await activateUserDatabase(user);
+
+        if (generation !== authenticationGeneration) {
+          await closeUserDatabase();
+          return;
+        }
+
+        saveCachedUser(user);
+
+        set({
+          user,
+          isAuthenticated: true,
+          isDatabaseReady: true,
+          isLoading: false,
+        });
+
+        notifyOtherTabs();
+      });
+    } catch (error) {
+      if (generation === authenticationGeneration) {
+        await closeUserDatabase().catch(() => undefined);
+
+        set({
+          user: null,
+          isAuthenticated: false,
+          isDatabaseReady: false,
+          isLoading: false,
+        });
       }
+
+      throw error;
+    }
+  },
+
+  // =================================
+  // LOGIN
+  // =================================
+
+  login: async (data) => {
+    const generation = ++authenticationGeneration;
+
+    set({
+      user: null,
+      isAuthenticated: false,
+      isDatabaseReady: false,
+      isLoading: true,
+    });
+
+    try {
+      await withAccountSessionLock(async () => {
+        const user = await loginUser(data);
+
+        if (generation !== authenticationGeneration) return;
+
+        clearPendingLogout();
+        clearCachedUser();
+
+        await activateUserDatabase(user);
+
+        if (generation !== authenticationGeneration) {
+          await closeUserDatabase();
+          return;
+        }
+
+        saveCachedUser(user);
+
+        set({
+          user,
+          isAuthenticated: true,
+          isDatabaseReady: true,
+          isLoading: false,
+        });
+
+        notifyOtherTabs();
+      });
+    } catch (error) {
+      if (generation === authenticationGeneration) {
+        await closeUserDatabase().catch(() => undefined);
+
+        set({
+          user: null,
+          isAuthenticated: false,
+          isDatabaseReady: false,
+          isLoading: false,
+        });
+      }
+
+      throw error;
+    }
+  },
+
+  // =================================
+  // LOGOUT
+  // =================================
+
+  logout: async () => {
+    const generation = ++authenticationGeneration;
+
+    // Immediately disable the local account.
+    set({
+      user: null,
+      isAuthenticated: false,
+      isDatabaseReady: false,
+      isLoading: false,
+    });
+
+    // Persist logout intent before attempting server logout.
+    try {
+      setPendingLogout();
     } catch {
       if (import.meta.env.DEV) {
-        console.error("Server logout failed.");
+        console.error("Could not persist logout protection.");
       }
-    } finally {
-      clearCachedUser();
-
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
     }
-  },
 
-  // INITIALIZE AUTHENTICATION
-  initializeAuth: async () => {
-    set({ isLoading: true });
-
-    const cachedUser = getCachedUser();
-
-    // Restore the local profile immediately when offline.
-    if (!navigator.onLine) {
-      set({
-        user: cachedUser,
-        isAuthenticated: !!cachedUser,
-        isLoading: false,
-      });
-
-      return;
-    }
+    clearCachedUser();
 
     try {
-      // First, check the existing access token.
-      const user = await getCurrentUser();
+      await withAccountSessionLock(async () => {
+        await closeUserDatabase();
 
-      saveCachedUser(user);
+        if (navigator.onLine) {
+          try {
+            await logoutUser();
+            clearPendingLogout();
+          } catch {
+            if (import.meta.env.DEV) {
+              console.error("Server logout failed. Logout will be retried.");
+            }
+          }
+        }
 
-      set({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
+        notifyOtherTabs();
       });
+    } catch {
+      if (import.meta.env.DEV) {
+        console.error("Could not complete account logout.");
+      }
 
-      return;
-    } catch (error) {
-      // Only attempt refresh when authentication has expired.
-      if (isAuthenticationError(error)) {
-        try {
-          await refreshSession();
+      await closeUserDatabase().catch(() => undefined);
+    }
 
-          const user = await getCurrentUser();
+    if (generation !== authenticationGeneration) return;
 
-          saveCachedUser(user);
+    set({
+      user: null,
+      isAuthenticated: false,
+      isDatabaseReady: false,
+      isLoading: false,
+    });
+  },
 
-          set({
-            user,
-            isAuthenticated: true,
-            isLoading: false,
-          });
+  // =================================
+  // INITIALIZE AUTHENTICATION
+  // =================================
 
-          return;
-        } catch (refreshError) {
-          // Expired or invalid refresh token.
-          if (isAuthenticationError(refreshError)) {
-            clearCachedUser();
+  initializeAuth: async () => {
+    const generation = ++authenticationGeneration;
 
+    set({
+      isLoading: true,
+      isDatabaseReady: false,
+    });
+
+    try {
+      await withAccountSessionLock(async () => {
+        const cachedUser = getCachedUser();
+
+        // A previous offline logout must never restore the old account.
+        if (hasPendingLogout()) {
+          clearCachedUser();
+
+          if (navigator.onLine) {
+            try {
+              await logoutUser();
+              clearPendingLogout();
+            } catch {
+              if (import.meta.env.DEV) {
+                console.error("Pending server logout could not be completed.");
+              }
+            }
+          }
+
+          await closeUserDatabase();
+
+          if (generation === authenticationGeneration) {
             set({
               user: null,
               isAuthenticated: false,
               isLoading: false,
+              isDatabaseReady: false,
             });
+          }
+
+          return;
+        }
+
+        // Restore cached account while offline.
+        if (!navigator.onLine) {
+          if (!cachedUser) {
+            await closeUserDatabase();
+
+            if (generation === authenticationGeneration) {
+              set({
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                isDatabaseReady: false,
+              });
+            }
 
             return;
           }
 
-          // Server outage or network failure.
-          if (isServerOrNetworkError(refreshError)) {
+          await activateUserDatabase(cachedUser);
+
+          if (generation === authenticationGeneration) {
             set({
               user: cachedUser,
-              isAuthenticated: !!cachedUser,
+              isAuthenticated: true,
               isLoading: false,
+              isDatabaseReady: true,
             });
+          }
 
-            return;
+          return;
+        }
+
+        let authenticatedUser: AuthUser | null = null;
+
+        try {
+          authenticatedUser = await getCurrentUser();
+        } catch (error) {
+          if (isAuthenticationError(error)) {
+            try {
+              await refreshSession();
+
+              authenticatedUser = await getCurrentUser();
+            } catch (refreshError) {
+              if (isAuthenticationError(refreshError)) {
+                clearCachedUser();
+              } else if (isServerOrNetworkError(refreshError)) {
+                authenticatedUser = cachedUser;
+              } else {
+                clearCachedUser();
+              }
+            }
+          } else if (isServerOrNetworkError(error)) {
+            authenticatedUser = cachedUser;
+          } else {
+            clearCachedUser();
           }
         }
-      }
 
-      // Handle server errors and network failures.
-      if (isServerOrNetworkError(error)) {
+        if (generation !== authenticationGeneration) return;
+
+        if (!authenticatedUser) {
+          await closeUserDatabase();
+
+          set({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+            isDatabaseReady: false,
+          });
+
+          return;
+        }
+
+        await activateUserDatabase(authenticatedUser);
+
+        if (generation !== authenticationGeneration) {
+          await closeUserDatabase();
+          return;
+        }
+
+        saveCachedUser(authenticatedUser);
+
         set({
-          user: cachedUser,
-          isAuthenticated: !!cachedUser,
+          user: authenticatedUser,
+          isAuthenticated: true,
           isLoading: false,
+          isDatabaseReady: true,
+        });
+      });
+    } catch {
+      if (generation === authenticationGeneration) {
+        await closeUserDatabase().catch(() => undefined);
+
+        set({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+          isDatabaseReady: false,
         });
 
-        return;
+        if (import.meta.env.DEV) {
+          console.error("Authentication initialization failed.");
+        }
       }
-
-      // Unexpected authentication failure.
-      clearCachedUser();
-
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-      });
     }
   },
 }));
+
+// =====================================
+// CROSS-TAB SESSION NOTIFICATIONS
+// =====================================
+
+if (typeof window !== "undefined") {
+  if (typeof BroadcastChannel !== "undefined") {
+    const channel = new BroadcastChannel(AUTH_CHANNEL_NAME);
+
+    channel.addEventListener("message", (event: MessageEvent) => {
+      if (event.data?.type === "SESSION_CHANGED") {
+        void useAuthStore.getState().initializeAuth();
+      }
+    });
+  }
+
+  window.addEventListener("storage", (event: StorageEvent) => {
+    if (
+      event.key === `${AUTH_CACHE_KEY}_event` ||
+      event.key === AUTH_LOGOUT_PENDING_KEY
+    ) {
+      void useAuthStore.getState().initializeAuth();
+    }
+  });
+}

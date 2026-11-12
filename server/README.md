@@ -52,3 +52,4 @@ The backend implements password hashing, JWT session versioning, refresh-token r
 Deployment
 - Backend hosting: Render
 - Database hosting: MongoDB Atlas
+CI/CD: GitHub Actions validates changes before production deployment.

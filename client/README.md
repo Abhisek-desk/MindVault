@@ -52,3 +52,4 @@ Start the application using docker compose up -d.
 Local Docker frontend: http://localhost:8080.
 Deployment
 Frontend hosting: Vercel.
+CI/CD: GitHub Actions validates changes before production deployment.

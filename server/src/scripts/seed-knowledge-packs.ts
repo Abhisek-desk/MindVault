@@ -10,7 +10,11 @@ dotenv.config({
 });
 
 // Base URL of the Mind Vault backend
-const SERVER_URL = process.env.SERVER_URL || "http://localhost:5000";
+const SERVER_URL = (
+  process.env.SERVER_URL ||
+  process.env.CLIENT_URL ||
+  "http://localhost:5000"
+).replace(/\/+$/, "");
 
 const knowledgePacks = [
   {

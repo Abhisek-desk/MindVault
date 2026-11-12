@@ -30,7 +30,7 @@ jobs:
       NODE_ENV: test
       JWT_ACCESS_SECRET: ci-test-access-secret-not-for-production
       JWT_REFRESH_SECRET: ci-test-refresh-secret-not-for-production
-      HF_HOME: ${{ runner.temp }}/mindvault-hf-cache
+      HF_HOME: ${{ github.workspace }}/.cache/huggingface
 
     steps:
       - name: Checkout repository
@@ -46,7 +46,7 @@ jobs:
       - name: Cache Hugging Face model
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/mindvault-hf-cache
+          path: ${{ github.workspace }}/.cache/huggingface
           key: ${{ runner.os }}-mindvault-embedding-model-v1
 
       - name: Install dependencies

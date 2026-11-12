@@ -144,7 +144,7 @@ function LandingPage() {
   ];
 
   return (
-    <main className="min-h-screen overflow-hidden bg-[#FFFAF1] text-[#17243D] selection:bg-[#F47768]/30 selection:text-[#17243D]">
+    <main className="min-h-screen overflow-hidden bg-[#FFFAF1] text-[#17243D]">
       <PageMetadata
         title="Mind Vault - Your Knowledge, Always Available"
         description="Mind Vault is your offline-first personal knowledge platform. Organize notes, explore downloadable knowledge packs, search your knowledge, and learn anywhere."
@@ -152,14 +152,14 @@ function LandingPage() {
       />
 
       {/* NAVIGATION */}
-      <header className="sticky top-0 z-50 border-b border-[#17243D]/10 bg-[#FFFAF1]/85 backdrop-blur-md transition-all duration-300">
+      <header className="relative z-50 border-b border-[#17243D]/10 bg-[#FFFAF1]/95">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
-          <Link to="/" className="group flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#17243D] text-[#F47768] shadow-md transition-transform duration-300 group-hover:scale-105 group-hover:rotate-3">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#17243D] text-[#F47768]">
               <BookOpen size={23} />
             </div>
 
-            <span className="text-xl font-bold tracking-tight transition-colors group-hover:text-[#B83E32]">Mind Vault</span>
+            <span className="text-xl font-bold tracking-tight">Mind Vault</span>
           </Link>
 
           <div className="hidden items-center gap-9 md:flex">
@@ -167,7 +167,7 @@ function LandingPage() {
               <a
                 key={item.label}
                 href={item.href}
-                className="relative text-sm font-medium text-[#596273] transition-colors duration-200 hover:text-[#B83E32] after:absolute after:-bottom-1 after:left-0 after:h-[2px] after:w-0 after:bg-[#B83E32] after:transition-all after:duration-300 hover:after:w-full"
+                className="text-sm font-medium text-[#596273] transition hover:text-[#B83E32]"
               >
                 {item.label}
               </a>
@@ -177,17 +177,17 @@ function LandingPage() {
           <div className="hidden items-center gap-5 md:flex">
             <Link
               to={isAuthenticated ? "/dashboard" : "/login"}
-              className="text-sm font-semibold transition-colors duration-200 hover:text-[#B83E32]"
+              className="text-sm font-semibold hover:text-[#B83E32]"
             >
               {isAuthenticated ? "Dashboard" : "Sign in"}
             </Link>
 
             <Link
               to={getStartedLink}
-              className="group relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-[#17243D] px-5 py-3 text-sm font-semibold text-white shadow-md shadow-[#17243D]/10 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#263957] hover:shadow-xl hover:shadow-[#17243D]/20 active:translate-y-0"
+              className="rounded-xl bg-[#17243D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#263957]"
             >
-              <span>Get Started</span>
-              <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" size={16} />
+              Get Started
+              <ArrowRight className="ml-2 inline" size={16} />
             </Link>
           </div>
 
@@ -198,7 +198,7 @@ function LandingPage() {
               menuOpen ? "Close navigation menu" : "Open navigation menu"
             }
             aria-expanded={menuOpen}
-            className="rounded-lg p-2 transition-colors hover:bg-[#17243D]/5 md:hidden"
+            className="rounded-lg p-2 hover:bg-[#17243D]/5 md:hidden"
           >
             {menuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -206,14 +206,14 @@ function LandingPage() {
 
         {/* MOBILE NAVIGATION */}
         {menuOpen && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-300 border-t border-[#17243D]/10 bg-[#FFFAF1] px-6 py-5 shadow-xl md:hidden">
+          <div className="border-t border-[#17243D]/10 bg-[#FFFAF1] px-6 py-5 md:hidden">
             <div className="flex flex-col gap-5">
               {navigation.map((item) => (
                 <a
                   key={item.label}
                   href={item.href}
                   onClick={() => setMenuOpen(false)}
-                  className="text-sm font-medium text-[#596273] transition-colors hover:text-[#B83E32]"
+                  className="text-sm font-medium text-[#596273]"
                 >
                   {item.label}
                 </a>
@@ -222,7 +222,7 @@ function LandingPage() {
               <Link
                 to={isAuthenticated ? "/dashboard" : "/login"}
                 onClick={() => setMenuOpen(false)}
-                className="text-sm font-semibold transition-colors hover:text-[#B83E32]"
+                className="text-sm font-semibold"
               >
                 {isAuthenticated ? "Dashboard" : "Sign in"}
               </Link>
@@ -230,7 +230,7 @@ function LandingPage() {
               <Link
                 to={getStartedLink}
                 onClick={() => setMenuOpen(false)}
-                className="rounded-xl bg-[#17243D] px-5 py-3 text-center text-sm font-semibold text-white shadow-md transition-all hover:bg-[#263957]"
+                className="rounded-xl bg-[#17243D] px-5 py-3 text-center text-sm font-semibold text-white"
               >
                 Get Started
               </Link>
@@ -240,15 +240,11 @@ function LandingPage() {
       </header>
 
       {/* HERO SECTION */}
-      <section className="relative overflow-hidden">
-        {/* Background Decorative Ambient Glows */}
-        <div className="absolute left-1/2 top-10 -z-10 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-[#F47768]/15 blur-[120px]" />
-        <div className="absolute right-0 top-1/2 -z-10 h-[400px] w-[400px] rounded-full bg-[#17243D]/5 blur-[100px]" />
-
+      <section className="relative">
         <div className="mx-auto grid max-w-7xl items-center gap-16 px-6 py-20 lg:grid-cols-2 lg:px-10 lg:py-28">
           <div className="relative z-10">
-            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F47768]/30 bg-[#F47768]/10 px-4 py-2 transition-transform duration-300 hover:scale-105">
-              <Sparkles size={15} className="animate-pulse text-[#B83E32]" />
+            <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-[#F47768]/30 bg-[#F47768]/10 px-4 py-2">
+              <Sparkles size={15} className="text-[#B83E32]" />
 
               <span className="text-xs font-bold tracking-wide text-[#B83E32]">
                 YOUR PERSONAL KNOWLEDGE SPACE
@@ -260,7 +256,7 @@ function LandingPage() {
               <br />
               Your Memory.
               <br />
-              <span className="bg-gradient-to-r from-[#B83E32] to-[#F47768] bg-clip-text text-transparent">Always Available.</span>
+              <span className="text-[#B83E32]">Always Available.</span>
             </h1>
 
             <p className="mt-8 max-w-xl text-lg leading-8 text-[#596273]">
@@ -272,32 +268,32 @@ function LandingPage() {
             <div className="mt-10 flex flex-col gap-4 sm:flex-row">
               <Link
                 to={getStartedLink}
-                className="group inline-flex items-center justify-center rounded-xl bg-[#17243D] px-7 py-4 font-semibold text-white shadow-xl shadow-[#17243D]/15 transition-all duration-300 hover:-translate-y-1 hover:bg-[#263957] hover:shadow-2xl hover:shadow-[#17243D]/25 active:translate-y-0"
+                className="inline-flex items-center justify-center rounded-xl bg-[#17243D] px-7 py-4 font-semibold text-white shadow-lg shadow-[#17243D]/15 transition hover:-translate-y-1 hover:bg-[#263957]"
               >
                 Start Building Your Vault
-                <ArrowRight className="ml-3 transition-transform duration-300 group-hover:translate-x-1" size={19} />
+                <ArrowRight className="ml-3" size={19} />
               </Link>
 
               <a
                 href="#features"
-                className="inline-flex items-center justify-center rounded-xl border border-[#17243D]/20 bg-white/50 px-7 py-4 font-semibold backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#17243D]/5 hover:shadow-md"
+                className="inline-flex items-center justify-center rounded-xl border border-[#17243D]/20 px-7 py-4 font-semibold transition hover:bg-[#17243D]/5"
               >
                 Explore Features
               </a>
             </div>
 
             <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 text-sm font-medium text-[#596273]">
-              <span className="flex items-center gap-2 transition-transform hover:scale-105">
+              <span className="flex items-center gap-2">
                 <Check size={17} className="text-[#B83E32]" />
                 Offline-first
               </span>
 
-              <span className="flex items-center gap-2 transition-transform hover:scale-105">
+              <span className="flex items-center gap-2">
                 <Check size={17} className="text-[#B83E32]" />
                 Multilingual
               </span>
 
-              <span className="flex items-center gap-2 transition-transform hover:scale-105">
+              <span className="flex items-center gap-2">
                 <Check size={17} className="text-[#B83E32]" />
                 Your own knowledge
               </span>
@@ -306,14 +302,14 @@ function LandingPage() {
 
           {/* HERO VISUAL */}
           <div className="relative mx-auto w-full max-w-xl">
-            <div className="absolute -right-10 -top-10 h-64 w-64 animate-pulse rounded-full bg-[#F47768]/20 blur-3xl" />
+            <div className="absolute -right-10 -top-10 h-64 w-64 rounded-full bg-[#F47768]/20 blur-3xl" />
 
-            <div className="absolute -bottom-10 -left-10 h-64 w-64 animate-pulse rounded-full bg-[#17243D]/10 blur-3xl" />
+            <div className="absolute -bottom-10 -left-10 h-64 w-64 rounded-full bg-[#17243D]/10 blur-3xl" />
 
-            <div className="relative rounded-3xl border border-[#17243D]/10 bg-white/90 p-5 shadow-2xl shadow-[#17243D]/15 backdrop-blur-xl transition-transform duration-500 hover:scale-[1.01] sm:p-7">
+            <div className="relative rounded-3xl border border-[#17243D]/10 bg-white p-5 shadow-2xl shadow-[#17243D]/10 sm:p-7">
               <div className="flex items-center justify-between border-b border-[#17243D]/10 pb-5">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#17243D] text-[#F47768] shadow-md">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#17243D] text-[#F47768]">
                     <BookOpen size={21} />
                   </div>
 
@@ -325,15 +321,15 @@ function LandingPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-2 border border-green-200 shadow-sm">
-                  <span className="h-2 w-2 animate-ping rounded-full bg-green-600" />
+                <div className="flex items-center gap-2 rounded-full bg-green-50 px-3 py-2">
+                  <span className="h-2 w-2 rounded-full bg-green-600" />
                   <span className="text-xs font-semibold text-green-800">
                     Available offline
                   </span>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center gap-3 rounded-xl bg-[#F8F1E5] px-4 py-3 transition-colors hover:bg-[#F0E6D5]">
+              <div className="mt-6 flex items-center gap-3 rounded-xl bg-[#F8F1E5] px-4 py-3">
                 <Search size={18} className="text-[#596273]" />
 
                 <span className="text-sm text-[#596273]">
@@ -342,14 +338,14 @@ function LandingPage() {
               </div>
 
               <div className="mt-6 grid grid-cols-2 gap-4">
-                <div className="group rounded-2xl bg-[#F8F1E5] p-5 transition-all duration-300 hover:-translate-y-1 hover:bg-[#F0E6D5] hover:shadow-md">
-                  <FileText className="mb-4 text-[#B83E32] transition-transform duration-300 group-hover:scale-110" size={22} />
+                <div className="rounded-2xl bg-[#F8F1E5] p-5">
+                  <FileText className="mb-4 text-[#B83E32]" size={22} />
                   <p className="text-2xl font-bold">128</p>
                   <p className="mt-1 text-xs text-[#596273]">Saved Notes</p>
                 </div>
 
-                <div className="group rounded-2xl bg-[#F8F1E5] p-5 transition-all duration-300 hover:-translate-y-1 hover:bg-[#F0E6D5] hover:shadow-md">
-                  <BookOpen className="mb-4 text-[#B83E32] transition-transform duration-300 group-hover:scale-110" size={22} />
+                <div className="rounded-2xl bg-[#F8F1E5] p-5">
+                  <BookOpen className="mb-4 text-[#B83E32]" size={22} />
                   <p className="text-2xl font-bold">05</p>
                   <p className="mt-1 text-xs text-[#596273]">Knowledge Packs</p>
                 </div>
@@ -371,14 +367,14 @@ function LandingPage() {
                 ].map((title, index) => (
                   <div
                     key={title}
-                    className="group flex items-center gap-3 border-b border-[#17243D]/5 py-4 transition-colors hover:bg-[#FFFAF1]/50 last:border-0"
+                    className="flex items-center gap-3 border-b border-[#17243D]/5 py-4 last:border-0"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32] transition-transform duration-300 group-hover:scale-110">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32]">
                       <FileText size={19} />
                     </div>
 
                     <div>
-                      <p className="text-sm font-semibold transition-colors group-hover:text-[#B83E32]">{title}</p>
+                      <p className="text-sm font-semibold">{title}</p>
 
                       <p className="mt-1 text-xs text-[#596273]">
                         {index + 1} day{index === 0 ? "" : "s"} ago
@@ -388,8 +384,8 @@ function LandingPage() {
                 ))}
               </div>
 
-              <div className="mt-5 flex items-center gap-3 rounded-xl bg-[#17243D] p-4 text-white shadow-lg transition-transform duration-300 hover:scale-[1.02]">
-                <WifiOff size={19} className="text-[#F47768] animate-pulse" />
+              <div className="mt-5 flex items-center gap-3 rounded-xl bg-[#17243D] p-4 text-white">
+                <WifiOff size={19} className="text-[#F47768]" />
 
                 <div>
                   <p className="text-sm font-semibold">
@@ -412,7 +408,7 @@ function LandingPage() {
       </section>
 
       {/* FEATURES SECTION */}
-      <section id="features" className="scroll-mt-10 bg-white py-24 shadow-inner">
+      <section id="features" className="scroll-mt-10 bg-white py-24">
         <div className="mx-auto max-w-7xl px-6 lg:px-10">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-sm font-bold uppercase tracking-widest text-[#B83E32]">
@@ -436,13 +432,13 @@ function LandingPage() {
               return (
                 <article
                   key={feature.title}
-                  className="group rounded-2xl border border-[#17243D]/10 bg-[#FFFAF1] p-7 transition-all duration-300 hover:-translate-y-2 hover:border-[#F47768]/40 hover:bg-white hover:shadow-xl hover:shadow-[#17243D]/10"
+                  className="rounded-2xl border border-[#17243D]/10 bg-[#FFFAF1] p-7 transition duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#17243D]/5"
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32] transition-transform duration-300 group-hover:scale-110 group-hover:bg-[#F47768] group-hover:text-white">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32]">
                     <Icon size={23} />
                   </div>
 
-                  <h3 className="mt-6 text-lg font-bold transition-colors group-hover:text-[#B83E32]">{feature.title}</h3>
+                  <h3 className="mt-6 text-lg font-bold">{feature.title}</h3>
 
                   <p className="mt-3 text-sm leading-7 text-[#596273]">
                     {feature.description}
@@ -477,13 +473,13 @@ function LandingPage() {
               const Icon = step.icon;
 
               return (
-                <article key={step.number} className="group relative rounded-2xl bg-[#FFFAF1]/50 p-6 transition-all duration-300 hover:-translate-y-1 hover:bg-white hover:shadow-lg">
+                <article key={step.number} className="relative">
                   <div className="flex items-center justify-between">
-                    <span className="text-4xl font-bold text-[#B83E32] transition-transform group-hover:scale-110">
+                    <span className="text-4xl font-bold text-[#B83E32]">
                       {step.number}
                     </span>
 
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-[#B83E32] shadow-sm transition-transform duration-300 group-hover:rotate-6 group-hover:bg-[#17243D] group-hover:text-[#F47768]">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-[#B83E32] shadow-sm">
                       <Icon size={23} />
                     </div>
                   </div>
@@ -521,10 +517,10 @@ function LandingPage() {
 
             <Link
               to={getStartedLink}
-              className="group inline-flex items-center gap-2 font-semibold text-[#B83E32] transition hover:gap-3"
+              className="inline-flex items-center gap-2 font-semibold text-[#B83E32] transition hover:gap-3"
             >
-              <span>Explore Mind Vault</span>
-              <ArrowRight className="transition-transform duration-300 group-hover:translate-x-1" size={18} />
+              Explore Mind Vault
+              <ArrowRight size={18} />
             </Link>
           </div>
 
@@ -535,25 +531,25 @@ function LandingPage() {
               return (
                 <article
                   key={pack.title}
-                  className="group rounded-2xl border border-[#17243D]/10 bg-[#FFFAF1] p-6 transition-all duration-300 hover:-translate-y-2 hover:border-[#F47768]/40 hover:shadow-xl hover:shadow-[#17243D]/5"
+                  className="rounded-2xl border border-[#17243D]/10 bg-[#FFFAF1] p-6 transition hover:-translate-y-1 hover:shadow-lg"
                 >
                   <div className="flex items-center justify-between">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32] transition-transform duration-300 group-hover:scale-110 group-hover:bg-[#B83E32] group-hover:text-white">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#F47768]/15 text-[#B83E32]">
                       <Icon size={23} />
                     </div>
 
-                    <span className="rounded-full bg-[#17243D]/5 px-3 py-1 text-xs font-semibold text-[#596273] transition-colors group-hover:bg-[#17243D]/10">
+                    <span className="rounded-full bg-[#17243D]/5 px-3 py-1 text-xs font-semibold text-[#596273]">
                       {pack.label}
                     </span>
                   </div>
 
-                  <h3 className="mt-6 text-lg font-bold transition-colors group-hover:text-[#B83E32]">{pack.title}</h3>
+                  <h3 className="mt-6 text-lg font-bold">{pack.title}</h3>
 
                   <p className="mt-3 text-sm leading-7 text-[#596273]">
                     {pack.description}
                   </p>
 
-                  <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-[#B83E32] transition-transform group-hover:translate-x-1">
+                  <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-[#B83E32]">
                     <Download size={16} />
                     Download for offline access
                   </div>
@@ -565,17 +561,13 @@ function LandingPage() {
       </section>
 
       {/* CALL TO ACTION */}
-      <section className="relative overflow-hidden bg-[#17243D] py-24 text-white">
-        {/* Glow Effects */}
-        <div className="absolute -left-20 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-[#F47768]/20 blur-[100px]" />
-        <div className="absolute -right-20 top-1/2 h-72 w-72 -translate-y-1/2 rounded-full bg-blue-500/10 blur-[100px]" />
-
-        <div className="relative z-10 mx-auto max-w-4xl px-6 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-[#F47768] shadow-inner transition-transform duration-300 hover:scale-110 hover:rotate-6">
+      <section className="bg-[#17243D] py-24">
+        <div className="mx-auto max-w-4xl px-6 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-[#F47768]">
             <BookOpen size={32} />
           </div>
 
-          <h2 className="mt-8 text-3xl font-bold leading-tight sm:text-5xl">
+          <h2 className="mt-8 text-3xl font-bold leading-tight text-white sm:text-5xl">
             Your knowledge deserves
             <br className="hidden sm:block" />a permanent home.
           </h2>
@@ -587,10 +579,10 @@ function LandingPage() {
 
           <Link
             to={getStartedLink}
-            className="group mt-10 inline-flex items-center justify-center rounded-xl bg-[#F47768] px-8 py-4 font-bold text-[#17243D] shadow-xl shadow-[#F47768]/20 transition-all duration-300 hover:-translate-y-1 hover:bg-[#FF8A7D] hover:shadow-2xl hover:shadow-[#F47768]/30 active:translate-y-0"
+            className="mt-10 inline-flex items-center justify-center rounded-xl bg-[#F47768] px-8 py-4 font-bold text-[#17243D] transition hover:-translate-y-1 hover:bg-[#FF8A7D]"
           >
-            <span>Get Started for Free</span>
-            <ArrowRight className="ml-3 transition-transform duration-300 group-hover:translate-x-1" size={19} />
+            Get Started for Free
+            <ArrowRight className="ml-3" size={19} />
           </Link>
         </div>
       </section>
@@ -600,8 +592,8 @@ function LandingPage() {
         <div className="mx-auto grid max-w-7xl gap-12 px-6 py-16 sm:grid-cols-2 lg:grid-cols-4 lg:px-10">
           {/* BRAND */}
           <div className="sm:col-span-2 lg:col-span-1">
-            <Link to="/" className="group inline-flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F47768] text-[#17243D] transition-transform duration-300 group-hover:scale-105">
+            <Link to="/" className="inline-flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F47768] text-[#17243D]">
                 <BookOpen size={23} />
               </div>
 
@@ -624,7 +616,7 @@ function LandingPage() {
 
             <ul className="mt-6 space-y-4 text-sm text-white/65">
               <li>
-                <a href="#features" className="transition-colors hover:text-[#F47768]">
+                <a href="#features" className="transition hover:text-[#F47768]">
                   Features
                 </a>
               </li>
@@ -632,7 +624,7 @@ function LandingPage() {
               <li>
                 <a
                   href="#how-it-works"
-                  className="transition-colors hover:text-[#F47768]"
+                  className="transition hover:text-[#F47768]"
                 >
                   How It Works
                 </a>
@@ -641,7 +633,7 @@ function LandingPage() {
               <li>
                 <a
                   href="#knowledge-packs"
-                  className="transition-colors hover:text-[#F47768]"
+                  className="transition hover:text-[#F47768]"
                 >
                   Knowledge Packs
                 </a>
@@ -657,7 +649,7 @@ function LandingPage() {
               <li>
                 <Link
                   to={isAuthenticated ? "/dashboard" : "/login"}
-                  className="transition-colors hover:text-[#F47768]"
+                  className="transition hover:text-[#F47768]"
                 >
                   {isAuthenticated ? "Dashboard" : "Sign In"}
                 </Link>
@@ -666,7 +658,7 @@ function LandingPage() {
               <li>
                 <Link
                   to={getStartedLink}
-                  className="transition-colors hover:text-[#F47768]"
+                  className="transition hover:text-[#F47768]"
                 >
                   {isAuthenticated ? "Open Workspace" : "Create Account"}
                 </Link>
@@ -676,7 +668,7 @@ function LandingPage() {
                 <li>
                   <Link
                     to="/library"
-                    className="transition-colors hover:text-[#F47768]"
+                    className="transition hover:text-[#F47768]"
                   >
                     My Library
                   </Link>
@@ -690,22 +682,22 @@ function LandingPage() {
             <h3 className="font-bold">Built For</h3>
 
             <ul className="mt-6 space-y-4 text-sm text-white/65">
-              <li className="flex items-center gap-3 transition-transform hover:translate-x-1">
+              <li className="flex items-center gap-3">
                 <WifiOff size={17} className="text-[#F47768]" />
                 Offline learning
               </li>
 
-              <li className="flex items-center gap-3 transition-transform hover:translate-x-1">
+              <li className="flex items-center gap-3">
                 <Languages size={17} className="text-[#F47768]" />
                 Multilingual knowledge
               </li>
 
-              <li className="flex items-center gap-3 transition-transform hover:translate-x-1">
+              <li className="flex items-center gap-3">
                 <Search size={17} className="text-[#F47768]" />
                 Fast knowledge search
               </li>
 
-              <li className="flex items-center gap-3 transition-transform hover:translate-x-1">
+              <li className="flex items-center gap-3">
                 <ShieldCheck size={17} className="text-[#F47768]" />
                 Personal knowledge management
               </li>

@@ -1,8 +1,8 @@
-\# Mind Vault
+# Mind Vault
 
 
 
-\### Your Knowledge. Your Memory. Always Available.
+### Your Knowledge. Your Memory. Always Available.
 
 
 
@@ -14,125 +14,125 @@ It combines local-first storage, downloadable knowledge packs, intelligent searc
 
 
 
-\*\*Live Application:\*\* https://mind-vault-iota-six.vercel.app/
+**Live Application:** https://mind-vault-iota-six.vercel.app/
 
 
 
-\---
+---
 
 
 
-\## Features
+## Features
 
 
 
-\### 1. Personal Knowledge Management
+### 1. Personal Knowledge Management
 
-\- Create, edit and delete personal notes.
+- Create, edit and delete personal notes.
 
-\- Organize notes using folders.
+- Organize notes using folders.
 
-\- Move notes between folders.
+- Move notes between folders.
 
-\- Access your knowledge through a centralized library.
+- Access your knowledge through a centralized library.
 
 
 
-\### 2. Offline-First Architecture
+### 2. Offline-First Architecture
 
-\- Store notes and downloaded knowledge locally using IndexedDB.
+- Store notes and downloaded knowledge locally using IndexedDB.
 
-\- Access previously saved content without internet connectivity.
+- Access previously saved content without internet connectivity.
 
-\- Search local notes while offline.
+- Search local notes while offline.
 
-\- Automatically synchronize changes when connectivity returns.
+- Automatically synchronize changes when connectivity returns.
 
 
 
-\### 3. Knowledge Packs
+### 3. Knowledge Packs
 
-\- Download curated knowledge packs.
+- Download curated knowledge packs.
 
-\- Read downloaded content offline.
+- Read downloaded content offline.
 
-\- Track learning progress.
+- Track learning progress.
 
-\- Manage downloaded packs locally.
+- Manage downloaded packs locally.
 
 
 
-\### 4. Intelligent Search
+### 4. Intelligent Search
 
-\- Fast local full-text search.
+- Fast local full-text search.
 
-\- Multilingual semantic embeddings.
+- Multilingual semantic embeddings.
 
-\- Search across personal knowledge.
+- Search across personal knowledge.
 
-\- Optimized search indexing.
+- Optimized search indexing.
 
 
 
-\### 5. AI Assistant
+### 5. AI Assistant
 
-\- AI-powered knowledge assistance using Groq.
+- AI-powered knowledge assistance using Groq.
 
-\- Context-aware retrieval from personal knowledge.
+- Context-aware retrieval from personal knowledge.
 
-\- Conversation-based interaction.
+- Conversation-based interaction.
 
-\- Multilingual embedding support.
+- Multilingual embedding support.
 
 
 
-\### 6. Synchronization and Conflict Management
+### 6. Synchronization and Conflict Management
 
-\- Synchronize local changes with the backend.
+- Synchronize local changes with the backend.
 
-\- Handle concurrent modifications using optimistic concurrency control.
+- Handle concurrent modifications using optimistic concurrency control.
 
-\- Detect synchronization conflicts.
+- Detect synchronization conflicts.
 
-\- Resolve conflicts using local or server versions.
+- Resolve conflicts using local or server versions.
 
-\- Protect against duplicate synchronization operations.
+- Protect against duplicate synchronization operations.
 
 
 
-\### 7. Account Security
+### 7. Account Security
 
-\- JWT-based authentication.
+- JWT-based authentication.
 
-\- HttpOnly authentication cookies.
+- HttpOnly authentication cookies.
 
-\- Refresh-token rotation.
+- Refresh-token rotation.
 
-\- Session versioning.
+- Session versioning.
 
-\- Account-specific local databases.
+- Account-specific local databases.
 
-\- Protected API endpoints and rate limiting.
+- Protected API endpoints and rate limiting.
 
 
 
-\### 8. Progressive Web Application
+### 8. Progressive Web Application
 
-\- Responsive interface.
+- Responsive interface.
 
-\- Installable PWA.
+- Installable PWA.
 
-\- Offline application support.
+- Offline application support.
 
-\- Optimized production bundles.
+- Optimized production bundles.
 
 
 
-\---
+---
 
 
 
-\## Technology Stack
+## Technology Stack
 
 
 
@@ -174,11 +174,11 @@ It combines local-first storage, downloadable knowledge packs, intelligent searc
 
 
 
-\---
+---
 
 
 
-\## Project Structure
+## Project Structure
 
 
 
@@ -238,15 +238,15 @@ MindVault/
 
 
 
-\---
+---
 
 
 
-\## Getting Started
+## Getting Started
 
 
 
-\### Prerequisites
+### Prerequisites
 
 
 
@@ -254,21 +254,21 @@ Install the following:
 
 
 
-\- Node.js 24 or later
+- Node.js 24 or later
 
-\- npm
+- npm
 
-\- Git
+- Git
 
-\- Docker Desktop
+- Docker Desktop
 
-\- MongoDB Atlas account
+- MongoDB Atlas account
 
-\- Groq API key
+- Groq API key
 
 
 
-\### Option 1: Run Using Docker Compose
+### Option 1: Run Using Docker Compose
 
 
 
@@ -276,7 +276,7 @@ Docker Compose is the recommended way to run the complete application locally.
 
 
 
-\*\*Step 1: Clone the repository\*\*
+**Step 1: Clone the repository**
 
 
 
@@ -292,7 +292,7 @@ cd MindVault
 
 
 
-\*\*Step 2: Configure backend environment\*\*
+**Step 2: Configure backend environment**
 
 
 
@@ -316,23 +316,23 @@ Configure the required variables:
 
 PORT=5000
 
-NODE\_ENV=production
+NODE-ENV=production
 
-CLIENT\_URL=http://localhost:8080
-
-
-
-MONGODB\_URI=your\_mongodb\_connection\_string
+CLIENT-URL=http://localhost:8080
 
 
 
-JWT\_ACCESS\_SECRET=your\_access\_secret
-
-JWT\_REFRESH\_SECRET=your\_refresh\_secret
+MONGODB-URI=your-mongodb-connection-string
 
 
 
-GROQ\_API\_KEY=your\_groq\_api\_key
+JWT-ACCESS-SECRET=your-access-secret
+
+JWT-REFRESH-SECRET=your-refresh-secret
+
+
+
+GROQ-API-KEY=your-groq-api-key
 
 ```
 
@@ -342,7 +342,7 @@ Use your own values. Never commit environment files or expose credentials.
 
 
 
-\*\*Step 3: Build and start the application\*\*
+**Step 3: Build and start the application**
 
 
 
@@ -354,7 +354,7 @@ docker compose up --build -d
 
 
 
-\*\*Step 4: Verify containers\*\*
+**Step 4: Verify containers**
 
 
 
@@ -366,7 +366,7 @@ docker compose ps
 
 
 
-\*\*Step 5: Open the application\*\*
+**Step 5: Open the application**
 
 
 
@@ -386,7 +386,7 @@ http://localhost:8080/api/v1/health
 
 
 
-\*\*Stop the application:\*\*
+**Stop the application:**
 
 
 
@@ -402,11 +402,11 @@ The Hugging Face model cache is stored in a persistent Docker volume.
 
 
 
-\---
+---
 
 
 
-\### Option 2: Run Frontend and Backend Separately
+### Option 2: Run Frontend and Backend Separately
 
 
 
@@ -414,7 +414,7 @@ Install dependencies in both directories.
 
 
 
-\*\*Backend:\*\*
+**Backend:**
 
 
 
@@ -438,7 +438,7 @@ Configure the backend environment in `server/.env` before starting.
 
 
 
-\*\*Frontend:\*\*
+**Frontend:**
 
 
 
@@ -466,11 +466,11 @@ Use the development URL printed by Vite.
 
 
 
-\---
+---
 
 
 
-\## Environment Variables
+## Environment Variables
 
 
 
@@ -484,19 +484,19 @@ The backend requires the following environment configuration:
 
 | `PORT` | Backend server port |
 
-| `NODE\_ENV` | Runtime environment |
+| `NODE-ENV` | Runtime environment |
 
-| `CLIENT\_URL` | Allowed frontend origin |
+| `CLIENT-URL` | Allowed frontend origin |
 
-| `MONGODB\_URI` | MongoDB connection string |
+| `MONGODB-URI` | MongoDB connection string |
 
-| `JWT\_ACCESS\_SECRET` | Access-token signing secret |
+| `JWT-ACCESS-SECRET` | Access-token signing secret |
 
-| `JWT\_REFRESH\_SECRET` | Refresh-token signing secret |
+| `JWT-REFRESH-SECRET` | Refresh-token signing secret |
 
-| `GROQ\_API\_KEY` | Groq API credential |
+| `GROQ-API-KEY` | Groq API credential |
 
-| `GROQ\_MODEL` | AI model identifier |
+| `GROQ-MODEL` | AI model identifier |
 
 
 
@@ -504,15 +504,15 @@ Never publish actual credentials, JWT secrets or database connection strings.
 
 
 
-\---
+---
 
 
 
-\## Development Commands
+## Development Commands
 
 
 
-\### Frontend
+### Frontend
 
 
 
@@ -538,7 +538,7 @@ Run from `client/`:
 
 
 
-\### Backend
+### Backend
 
 
 
@@ -562,11 +562,11 @@ Run from `server/`:
 
 
 
-\---
+---
 
 
 
-\## Testing
+## Testing
 
 
 
@@ -578,23 +578,23 @@ The test suites cover areas such as:
 
 
 
-\- Authentication and session management.
+- Authentication and session management.
 
-\- Notes and folders.
+- Notes and folders.
 
-\- Synchronization.
+- Synchronization.
 
-\- Conflict resolution.
+- Conflict resolution.
 
-\- Knowledge packs.
+- Knowledge packs.
 
-\- AI validation and retrieval.
+- AI validation and retrieval.
 
-\- Embedding services.
+- Embedding services.
 
-\- Frontend API handling.
+- Frontend API handling.
 
-\- Account isolation.
+- Account isolation.
 
 
 
@@ -630,11 +630,11 @@ npm test
 
 
 
-\---
+---
 
 
 
-\## CI/CD Pipeline
+## CI/CD Pipeline
 
 
 
@@ -648,69 +648,69 @@ Workflow:
 
 ```text
 
-&#x20;      GitHub Push / Pull Request
+        GitHub Push / Pull Request
 
-&#x20;                 |
+                  |
 
-&#x20;                 v
+                   v
 
-&#x20;         GitHub Actions CI
+           GitHub Actions CI
 
-&#x20;                 |
+                   |
 
-&#x20;         +-------+-------+
+           +-------+-------+
 
-&#x20;         |               |
+           |               |
 
-&#x20;         v               v
+           v               v
 
-&#x20;      Backend         Frontend
+        Backend         Frontend
 
-&#x20;      Tests            Tests
+        Tests            Tests
 
-&#x20;      Build            Lint
+        Build            Lint
 
-&#x20;                       Build
+                         Build
 
-&#x20;         |               |
+           |               |
 
-&#x20;         +-------+-------+
+           +-------+-------+
 
-&#x20;                 |
+                   |
 
-&#x20;                 v
+                   v
 
-&#x20;            Docker Builds
+              Docker Builds
 
-&#x20;                 |
+                   |
 
-&#x20;         +-------+-------+
+           +-------+-------+
 
-&#x20;         |               |
+           |               |
 
-&#x20;         v               v
+           v               v
 
-&#x20;      Backend         Frontend
+        Backend         Frontend
 
-&#x20;      Image            Image
+        Image            Image
 
-&#x20;                 |
+                   |
 
-&#x20;                 v
+                   v
 
-&#x20;         Deployment Checks
+           Deployment Checks
 
-&#x20;                 |
+                   |
 
-&#x20;         +-------+-------+
+           +-------+-------+
 
-&#x20;         |               |
+           |               |
 
-&#x20;         v               v
+           v               v
 
-&#x20;       Render           Vercel
+         Render           Vercel
 
-&#x20;       Backend          Frontend
+         Backend          Frontend
 
 ```
 
@@ -736,11 +736,11 @@ Production deployment checks are configured through the Vercel project settings.
 
 
 
-\---
+---
 
 
 
-\## Production Deployment
+## Production Deployment
 
 
 
@@ -760,7 +760,7 @@ Production deployment checks are configured through the Vercel project settings.
 
 
 
-\*\*Live Application:\*\*
+**Live Application:**
 
 
 
@@ -768,11 +768,105 @@ https://mind-vault-iota-six.vercel.app/
 
 
 
-\---
+---
 
 
 
-\## Security
+
+## Production Monitoring
+
+Mind Vault uses the following services for production monitoring:
+
+| Service | What to Monitor | Where |
+|---|---|---|
+| Vercel | Deployment status and runtime errors | Vercel Dashboard |
+| Render | Backend availability, deployment status and logs | Render Dashboard |
+| MongoDB Atlas | Database availability, storage and metrics | MongoDB Atlas |
+| GitHub Actions | CI workflow execution and build failures | GitHub Actions |
+
+### Health Check Endpoints
+
+Production backend:
+
+https://mindvault-6ff3.onrender.com/api/v1/health
+
+Health check through the frontend proxy:
+
+https://mind-vault-iota-six.vercel.app/api/v1/health
+
+Expected response:
+
+```json
+{
+  "success": true,
+  "message": "Mind Vault API is running"
+}
+```
+
+An HTTP 200 response confirms that the health endpoint is responding. It does not independently verify every application dependency.
+
+### Deployment Monitoring
+
+After every production deployment:
+
+1. Confirm backend tests and build pass.
+2. Confirm frontend tests, linting and build pass.
+3. Confirm Docker image builds pass.
+4. Verify Render deployment reaches Live.
+5. Verify Vercel production deployment reaches Ready.
+6. Test the production website and backend health endpoints.
+
+## Troubleshooting
+
+| Problem | Recommended Action |
+|---|---|
+| Website unavailable | Check Vercel deployment status and logs. |
+| API returns 5xx errors | Check Render service status and backend logs. |
+| First API request is slow | Check whether the Render free instance is waking from inactivity. |
+| Authentication fails | Check backend logs, cookie settings, CORS and production environment configuration. |
+| Notes do not synchronize | Check connectivity, authentication and frontend sync status. |
+| Knowledge pack download fails | Check the backend download endpoint and Render logs. |
+| CI workflow fails | Inspect the failed job and step in GitHub Actions. |
+| Automatic deployment does not start | Verify GitHub Actions checks and Render's After CI Checks Pass setting. |
+
+Never publish environment variables, access tokens, JWT secrets, database credentials or private user data in logs or support requests.
+
+## Backup and Recovery
+
+### Database Backup
+
+MongoDB Atlas hosts the production database.
+
+Recommended precautions:
+
+- Review backup options available for the current Atlas cluster and subscription.
+- Enable automated backups when supported.
+- Periodically create independent database backups.
+- Store backups securely outside the application deployment.
+- Restrict backup access to authorized administrators.
+
+### Recovery Procedure
+
+If database recovery is required:
+
+1. Identify the most recent valid backup.
+2. Verify the backup and recovery target.
+3. Restore using MongoDB Atlas recovery tools or the appropriate MongoDB restore procedure.
+4. Verify database collections and indexes.
+5. Confirm backend connectivity.
+6. Test authentication, notes, folders and synchronization.
+
+Do not overwrite production data without confirming the recovery target.
+
+### Local Data Considerations
+
+Mind Vault stores offline data in browser IndexedDB.
+
+Local browser data is separate from MongoDB Atlas backups. Unsynchronized changes may exist only on the user's device.
+
+Users should synchronize pending changes whenever possible and avoid clearing browser storage unless local data has been recovered or is no longer needed.
+
+## Security
 
 
 
@@ -780,27 +874,27 @@ Mind Vault implements several security measures:
 
 
 
-\- Password hashing with bcrypt.
+- Password hashing with bcrypt.
 
-\- JWT authentication.
+- JWT authentication.
 
-\- HttpOnly cookies.
+- HttpOnly cookies.
 
-\- Refresh-token rotation.
+- Refresh-token rotation.
 
-\- Session versioning.
+- Session versioning.
 
-\- Protected backend routes.
+- Protected backend routes.
 
-\- API rate limiting.
+- API rate limiting.
 
-\- Request validation using Zod.
+- Request validation using Zod.
 
-\- Secure CORS configuration.
+- Secure CORS configuration.
 
-\- Helmet security headers.
+- Helmet security headers.
 
-\- Account-specific local databases.
+- Account-specific local databases.
 
 
 
@@ -808,11 +902,11 @@ Local IndexedDB data is not encrypted by default. Users should protect access to
 
 
 
-\---
+---
 
 
 
-\## Offline Architecture
+## Offline Architecture
 
 
 
@@ -828,15 +922,15 @@ When the network becomes available:
 
 
 
-1\. Pending local changes are collected.
+1. Pending local changes are collected.
 
-2\. Changes are pushed to the backend.
+2. Changes are pushed to the backend.
 
-3\. Server changes are retrieved.
+3. Server changes are retrieved.
 
-4\. Version conflicts are detected.
+4. Version conflicts are detected.
 
-5\. Conflicts can be resolved by the user.
+5. Conflicts can be resolved by the user.
 
 
 
@@ -844,11 +938,11 @@ This approach allows users to continue working without depending on continuous i
 
 
 
-\---
+---
 
 
 
-\## Future Improvements
+## Future Improvements
 
 
 
@@ -856,25 +950,25 @@ Potential future enhancements include:
 
 
 
-\- Additional knowledge packs.
+- Additional knowledge packs.
 
-\- Improved AI retrieval.
+- Improved AI retrieval.
 
-\- More advanced learning analytics.
+- More advanced learning analytics.
 
-\- Expanded multilingual capabilities.
+- Expanded multilingual capabilities.
 
-\- Enhanced synchronization diagnostics.
+- Enhanced synchronization diagnostics.
 
-\- Additional accessibility improvements.
-
-
-
-\---
+- Additional accessibility improvements.
 
 
 
-\## License
+---
+
+
+
+## License
 
 
 
@@ -886,9 +980,9 @@ License terms can be added when distribution requirements are finalized.
 
 
 
-\---
+---
 
 
 
-\*\*Mind Vault — Your Knowledge. Your Memory. Always Available.\*\*
+**Mind Vault — Your Knowledge. Your Memory. Always Available.**
 

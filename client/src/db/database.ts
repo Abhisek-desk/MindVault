@@ -38,6 +38,18 @@ export interface LocalPack {
   contentBlob?: Blob;
 }
 
+export interface LocalLearningProgress {
+  packId: string;
+  completedTopics: string[];
+  totalTopics: number;
+  progressPercentage: number;
+  status: "not-started" | "in-progress" | "completed";
+  startedAt: string;
+  updatedAt: string;
+  lastLessonId: string | null;
+  syncStatus: "synced" | "pending";
+}
+
 export interface LocalSyncChange {
   id?: number;
   entityType: "note" | "folder";
@@ -77,10 +89,12 @@ class MindVaultDatabase extends Dexie {
   syncQueue!: Table<LocalSyncChange, number>;
   syncMeta!: Table<LocalSyncMeta, string>;
   conflicts!: Table<LocalConflict, string>;
+  learningProgress!: Table<LocalLearningProgress, string>;
 
   constructor(databaseName: string) {
     super(databaseName);
 
+    // VERSION 1
     this.version(1).stores({
       notes: "id, folderId, updatedAt, syncStatus",
       packs: "id, category, language",
@@ -89,6 +103,7 @@ class MindVaultDatabase extends Dexie {
       syncMeta: "key",
     });
 
+    // VERSION 2
     this.version(2).stores({
       notes: "id, folderId, updatedAt, syncStatus",
       packs: "id, category, language",
@@ -98,6 +113,7 @@ class MindVaultDatabase extends Dexie {
       syncMeta: "key",
     });
 
+    // VERSION 3
     this.version(3).stores({
       notes: "id, folderId, updatedAt, syncStatus",
       packs: "id, category, language",
@@ -109,6 +125,7 @@ class MindVaultDatabase extends Dexie {
         "id, &[entityType+entityId], entityType, entityId, detectedAt",
     });
 
+    // VERSION 4 — NOTE AND FOLDER VERSIONING
     this.version(4)
       .stores({
         notes: "id, folderId, updatedAt, syncStatus",
@@ -135,6 +152,20 @@ class MindVaultDatabase extends Dexie {
             folder.version ??= 1;
           });
       });
+
+    // VERSION 5 — OFFLINE LEARNING PROGRESS
+    this.version(5).stores({
+      notes: "id, folderId, updatedAt, syncStatus",
+      packs: "id, category, language",
+      folders: "id, name, updatedAt, syncStatus",
+      syncQueue:
+        "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+      syncMeta: "key",
+      conflicts:
+        "id, &[entityType+entityId], entityType, entityId, detectedAt",
+      learningProgress:
+        "packId, status, updatedAt, syncStatus",
+    });
   }
 }
 
@@ -161,7 +192,7 @@ let pendingDatabaseSwitches = 0;
 
 let resolveDatabaseUsage: (() => void) | null = null;
 
-// Wait until all active database leases are released.
+// Wait until all active database operations finish.
 
 const waitForDatabaseUsageToFinish = async (): Promise<void> => {
   if (activeDatabaseUsers === 0) {
@@ -255,10 +286,8 @@ export const initializeUserDatabase = async (
       return;
     }
 
-    // Wait until the previous database's operations finish.
     await waitForDatabaseUsageToFinish();
 
-    // Close the previous database.
     db.close();
 
     const accountDatabase = new MindVaultDatabase(
@@ -280,7 +309,6 @@ export const initializeUserDatabase = async (
     }
   };
 
-  // Prevent new leases while a switch is pending.
   pendingDatabaseSwitches += 1;
 
   const operation = databaseSwitchPromise
@@ -289,7 +317,6 @@ export const initializeUserDatabase = async (
       pendingDatabaseSwitches -= 1;
     });
 
-  // Serialize database switching operations.
   databaseSwitchPromise = operation.catch(() => undefined);
 
   await operation;
@@ -300,20 +327,16 @@ export const initializeUserDatabase = async (
 // =====================================
 
 export const closeUserDatabase = async (): Promise<void> => {
-  // Prevent new leases during logout.
   pendingDatabaseSwitches += 1;
 
   const operation = databaseSwitchPromise
     .then(async () => {
-      // Wait for active database operations.
       await waitForDatabaseUsageToFinish();
 
       db.close();
 
       activeUserId = null;
 
-      // Use a separate anonymous database after logout.
-      // Never fall back to the shared legacy database.
       db = new MindVaultDatabase("MindVaultDatabase_anonymous");
     })
     .finally(() => {
@@ -340,15 +363,12 @@ export const getActiveDatabaseUserId = (): string | null => {
 export const withDatabaseLease = async <T>(
   operation: () => Promise<T>,
 ): Promise<T> => {
-  // Wait until all currently scheduled database switches finish.
   while (pendingDatabaseSwitches > 0) {
     await databaseSwitchPromise;
   }
 
-  // Also wait for a switch that was already scheduled.
   await databaseSwitchPromise;
 
-  // Protect both account and anonymous database operations.
   const releaseLease = acquireUsageLease(activeUserId);
 
   try {

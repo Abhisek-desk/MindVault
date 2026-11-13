@@ -4,7 +4,9 @@ import { lazy, Suspense, type ReactNode } from "react";
 // LAZY-LOADED PAGES
 // =====================================
 
-export const LoginPage = lazy(() => import("../features/auth/pages/LoginPage"));
+export const LoginPage = lazy(
+  () => import("../features/auth/pages/LoginPage"),
+);
 
 export const RegisterPage = lazy(
   () => import("../features/auth/pages/RegisterPage"),
@@ -38,6 +40,10 @@ export const ConflictsPage = lazy(
   () => import("../features/sync/pages/ConflictsPage"),
 );
 
+export const LearningPage = lazy(
+  () => import("../features/learning/pages/LearningPage"),
+);
+
 export const LandingPage = lazy(
   () => import("../features/landing/pages/LandingPage"),
 );
@@ -64,6 +70,14 @@ function PageLoader() {
 // ROUTE PAGE WRAPPER
 // =====================================
 
-export function RoutePage({ children }: { children: ReactNode }) {
-  return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+export function RoutePage({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <Suspense fallback={<PageLoader />}>
+      {children}
+    </Suspense>
+  );
 }

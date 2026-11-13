@@ -3,6 +3,7 @@ const API_URL = "/api/v1";
 const ALLOWED_METHODS = [
   "GET",
   "POST",
+  "PUT",
   "PATCH",
   "DELETE",
 ] as const;

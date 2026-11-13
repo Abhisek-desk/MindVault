@@ -41,14 +41,61 @@ describe("API service security", () => {
   });
 
   it("rejects unsupported HTTP methods", async () => {
-    await expect(
-      apiRequest("/notes", {
-        method: "PUT" as never,
-      })
-    ).rejects.toThrow("Unsupported HTTP method.");
+  await expect(
+    apiRequest("/notes", {
+      method: "OPTIONS" as never,
+    })
+  ).rejects.toThrow("Unsupported HTTP method.");
 
-    expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it("supports secure PUT requests with JSON bodies", async () => {
+  vi.mocked(fetch).mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        success: true,
+        message: "Progress updated.",
+      }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    )
+  );
+
+  const result = await apiRequest<{
+    success: boolean;
+    message: string;
+  }>("/learning/507f1f77bcf86cd799439011", {
+    method: "PUT",
+    body: {
+      completedTopics: ["lesson-1.md"],
+      totalTopics: 5,
+    },
   });
+
+  expect(result.success).toBe(true);
+
+  expect(fetch).toHaveBeenCalledWith(
+    "/api/v1/learning/507f1f77bcf86cd799439011",
+    expect.objectContaining({
+      method: "PUT",
+      credentials: "include",
+      redirect: "error",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        completedTopics: ["lesson-1.md"],
+        totalTopics: 5,
+      }),
+    })
+  );
+});
 
   it("rejects GET requests containing a body", async () => {
     await expect(

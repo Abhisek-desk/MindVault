@@ -16,6 +16,7 @@ import {
   SearchPage,
   LandingPage,
   ConflictsPage,
+  LearningPage,
   RoutePage,
 } from "./route-pages";
 
@@ -24,6 +25,10 @@ import {
 // =====================================
 
 const router = createBrowserRouter([
+  // =====================================
+  // PUBLIC ROUTES
+  // =====================================
+
   {
     element: <PublicRoute />,
     children: [
@@ -45,6 +50,10 @@ const router = createBrowserRouter([
       },
     ],
   },
+
+  // =====================================
+  // PROTECTED ROUTES
+  // =====================================
 
   {
     element: <ProtectedRoute />,
@@ -105,8 +114,20 @@ const router = createBrowserRouter([
           </RoutePage>
         ),
       },
+      {
+        path: "/learning",
+        element: (
+          <RoutePage>
+            <LearningPage />
+          </RoutePage>
+        ),
+      },
     ],
   },
+
+  // =====================================
+  // LANDING PAGE
+  // =====================================
 
   {
     path: "/",
@@ -116,6 +137,10 @@ const router = createBrowserRouter([
       </RoutePage>
     ),
   },
+
+  // =====================================
+  // NOT FOUND
+  // =====================================
 
   {
     path: "*",

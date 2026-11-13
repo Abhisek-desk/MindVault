@@ -1,4 +1,4 @@
-{
+﻿{
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -7,6 +7,10 @@
     {
       "source": "/downloads/(.*)",
       "destination": "https://mindvault-6ff3.onrender.com/downloads/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }

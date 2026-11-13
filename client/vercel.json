@@ -1,12 +1,13 @@
 ﻿{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
-      "source": "/api/(.*)",
-      "destination": "https://mindvault-6ff3.onrender.com/api/$1"
+      "source": "/api/:path*",
+      "destination": "https://mindvault-6ff3.onrender.com/api/:path*"
     },
     {
-      "source": "/downloads/(.*)",
-      "destination": "https://mindvault-6ff3.onrender.com/downloads/$1"
+      "source": "/downloads/:path*",
+      "destination": "https://mindvault-6ff3.onrender.com/downloads/:path*"
     },
     {
       "source": "/(.*)",

@@ -164,7 +164,7 @@ function DiagnosticCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-gray-500">
+          <p className="text-sm font-medium text-[#596273]">
             {title}
           </p>
 
@@ -202,7 +202,7 @@ function DiagnosticCard({
         </motion.div>
       </div>
 
-      <p className="mt-4 text-xs leading-5 text-gray-500">
+      <p className="mt-4 text-xs leading-5 text-[#596273]">
         {description}
       </p>
     </motion.div>
@@ -448,7 +448,7 @@ function SyncDiagnosticsPage() {
             className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"
           >
             <div>
-              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#F47768]">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[#B83E32]">
                 <Activity size={18} />
 
                 Synchronization Center
@@ -458,7 +458,7 @@ function SyncDiagnosticsPage() {
                 Sync Diagnostics
               </h1>
 
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#596273]">
                 Monitor your local synchronization queue,
                 connection health, and unresolved changes.
               </p>
@@ -579,7 +579,7 @@ function SyncDiagnosticsPage() {
                     Internet Connection
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-[#596273]">
                     {isOnline
                       ? "Your device reports an active network connection."
                       : "Your device is currently offline."}
@@ -649,7 +649,7 @@ function SyncDiagnosticsPage() {
                     Backend Connection
                   </p>
 
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-[#596273]">
                     Checks the Mind Vault health endpoint.
                   </p>
                 </div>
@@ -696,7 +696,7 @@ function SyncDiagnosticsPage() {
           >
             <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
               <div>
-                <p className="text-sm font-semibold text-gray-500">
+                <p className="text-sm font-semibold text-[#596273]">
                   Current Synchronization Status
                 </p>
 
@@ -779,11 +779,11 @@ function SyncDiagnosticsPage() {
             <div className="mt-6 flex items-start gap-3 border-t border-[#17243D]/10 pt-5">
               <Clock
                 size={19}
-                className="mt-0.5 shrink-0 text-gray-400"
+                className="mt-0.5 shrink-0 text-[#596273]"
               />
 
               <div>
-                <p className="text-xs font-semibold text-gray-500">
+                <p className="text-xs font-semibold text-[#596273]">
                   Last Successful Synchronization
                 </p>
 
@@ -960,7 +960,7 @@ function SyncDiagnosticsPage() {
                   : { opacity: 0, y: 5 }
               }
               animate={{ opacity: 1, y: 0 }}
-              className="mt-4 text-xs text-gray-500"
+              className="mt-4 text-xs text-[#596273]"
             >
               Total queued operations: {diagnostics.totalQueued}
             </motion.p>
@@ -1056,9 +1056,9 @@ function SyncDiagnosticsPage() {
               shouldReduceMotion ? false : { opacity: 0 }
             }
             animate={{ opacity: 1 }}
-            className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-gray-400"
+            className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-[#596273]"
           >
-            Mind Vault Â· Your Knowledge. Your Memory. Always Available.
+            Mind Vault | Your Knowledge. Your Memory. Always Available.
           </motion.footer>
         </motion.div>
       </main>

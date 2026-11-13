@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 // =====================================
 // LAZY-LOADED PAGES
@@ -48,6 +49,10 @@ export const LandingPage = lazy(
   () => import("../features/landing/pages/LandingPage"),
 );
 
+export const SyncDiagnosticsPage = lazy(
+  () => import("../features/sync/pages/SyncDiagnosticsPage"),
+);
+
 // =====================================
 // LOADING FALLBACK
 // =====================================
@@ -67,7 +72,7 @@ function PageLoader() {
 }
 
 // =====================================
-// ROUTE PAGE WRAPPER
+// ANIMATED ROUTE PAGE
 // =====================================
 
 export function RoutePage({
@@ -75,9 +80,31 @@ export function RoutePage({
 }: {
   children: ReactNode;
 }) {
+  const shouldReduceMotion = useReducedMotion();
+
   return (
     <Suspense fallback={<PageLoader />}>
-      {children}
+      <motion.div
+        initial={
+          shouldReduceMotion
+            ? false
+            : {
+                opacity: 0,
+                y: 12,
+              }
+        }
+        animate={{
+          opacity: 1,
+          y: 0,
+        }}
+        transition={{
+          duration: shouldReduceMotion ? 0 : 0.32,
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        className="min-w-0"
+      >
+        {children}
+      </motion.div>
     </Suspense>
   );
 }

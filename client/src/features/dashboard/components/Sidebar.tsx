@@ -13,6 +13,7 @@ import {
   Vault,
   Search,
   RefreshCw,
+  Activity,
 } from "lucide-react";
 
 import { useAuthStore } from "../../../stores/auth.store";
@@ -30,6 +31,11 @@ const navigationItems = [
   { name: "Learning", path: "/learning", icon: Brain },
   { name: "Search", path: "/search", icon: Search },
   { name: "Conflict Center", path: "/conflicts", icon: RefreshCw },
+  {
+    name: "Sync Diagnostics",
+    path: "/sync",
+    icon: Activity,
+  },
 ];
 
 function Sidebar({ isOpen, onClose }: SidebarProps) {

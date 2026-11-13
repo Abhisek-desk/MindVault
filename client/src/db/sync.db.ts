@@ -1,8 +1,21 @@
 import {
   db,
   withDatabaseLease,
+  getActiveDatabaseUserId,
   type LocalSyncChange,
 } from "./database";
+
+// =====================================
+// DIAGNOSTICS TYPES
+// =====================================
+
+export interface SyncDiagnostics {
+  pending: number;
+  processing: number;
+  failed: number;
+  conflicts: number;
+  totalQueued: number;
+}
 
 // =====================================
 // GET PENDING SYNC CHANGES
@@ -26,6 +39,103 @@ export const getAllSyncChanges = async (): Promise<LocalSyncChange[]> => {
     return db.syncQueue
       .orderBy("createdAt")
       .toArray();
+  });
+};
+
+// =====================================
+// GET SYNC DIAGNOSTICS
+// =====================================
+
+export const getSyncDiagnostics =
+  async (): Promise<SyncDiagnostics> => {
+    return withDatabaseLease(async () => {
+      const [changes, conflicts] = await Promise.all([
+        db.syncQueue.toArray(),
+        db.conflicts.count(),
+      ]);
+
+      const pending = changes.filter(
+        (change) => change.status === "pending",
+      ).length;
+
+      const processing = changes.filter(
+        (change) => change.status === "processing",
+      ).length;
+
+      const failed = changes.filter(
+        (change) => change.status === "failed",
+      ).length;
+
+      return {
+        pending,
+        processing,
+        failed,
+        conflicts,
+        totalQueued: changes.length,
+      };
+    });
+  };
+
+// =====================================
+// LAST SUCCESSFUL SYNCHRONIZATION
+// =====================================
+
+const LAST_SYNC_KEY = "lastSuccessfulSyncAt";
+
+export const getLastSuccessfulSyncAt =
+  async (): Promise<string | null> => {
+    return withDatabaseLease(async () => {
+      const metadata = await db.syncMeta.get(LAST_SYNC_KEY);
+
+      if (!metadata) {
+        return null;
+      }
+
+      const timestamp = metadata.value;
+
+      if (
+        typeof timestamp !== "string" ||
+        !Number.isFinite(Date.parse(timestamp))
+      ) {
+        return null;
+      }
+
+      return timestamp;
+    });
+  };
+
+export const saveLastSuccessfulSyncAt = async (
+  timestamp: string,
+  expectedUserId: string,
+): Promise<void> => {
+  if (
+    typeof timestamp !== "string" ||
+    !Number.isFinite(Date.parse(timestamp))
+  ) {
+    throw new Error("Invalid synchronization timestamp.");
+  }
+
+  if (
+    typeof expectedUserId !== "string" ||
+    !/^[a-fA-F0-9]{24}$/.test(expectedUserId)
+  ) {
+    throw new Error("Invalid account ID.");
+  }
+
+  await withDatabaseLease(async () => {
+    const activeUserId = getActiveDatabaseUserId();
+
+    if (
+      !activeUserId ||
+      activeUserId !== expectedUserId.toLowerCase()
+    ) {
+      throw new Error("Account changed during synchronization.");
+    }
+
+    await db.syncMeta.put({
+      key: LAST_SYNC_KEY,
+      value: timestamp,
+    });
   });
 };
 

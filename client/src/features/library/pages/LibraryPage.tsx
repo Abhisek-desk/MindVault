@@ -18,6 +18,13 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+import {
+  motion,
+  AnimatePresence,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
+
 import Sidebar from "../../../features/dashboard/components/Sidebar";
 import DashboardHeader from "../../../features/dashboard/components/DashboardHeader";
 
@@ -42,8 +49,34 @@ const categories = [
 
 const languages = ["All", "English", "Hindi"];
 
+const containerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.09,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 18,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.4,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
 function LibraryPage() {
   const navigate = useNavigate();
+  const shouldReduceMotion = useReducedMotion();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -58,6 +91,14 @@ function LibraryPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const activeContainerVariants = shouldReduceMotion
+    ? undefined
+    : containerVariants;
+
+  const activeItemVariants = shouldReduceMotion
+    ? undefined
+    : itemVariants;
 
   const downloadedIds = useMemo(
     () => new Set(localPacks.map((pack) => pack.id)),
@@ -265,10 +306,20 @@ function LibraryPage() {
           onMenuClick={() => setSidebarOpen(true)}
         />
 
-        <div className="mx-auto max-w-7xl space-y-8 px-5 py-8 md:px-8">
+        <motion.div
+          initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="mx-auto max-w-7xl space-y-8 px-5 py-8 md:px-8"
+        >
           {/* PAGE TITLE */}
 
-          <section className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center">
+          <motion.section
+            variants={activeItemVariants}
+            initial={shouldReduceMotion ? false : "hidden"}
+            animate="visible"
+            className="flex flex-col justify-between gap-5 sm:flex-row sm:items-center"
+          >
             <div>
               <p className="mb-2 text-sm font-semibold text-[#F47768]">
                 KNOWLEDGE LIBRARY
@@ -283,43 +334,85 @@ function LibraryPage() {
               </p>
             </div>
 
-            <button
+            <motion.button
+              whileHover={
+                shouldReduceMotion ? undefined : { y: -2, scale: 1.02 }
+              }
+              whileTap={
+                shouldReduceMotion ? undefined : { scale: 0.97 }
+              }
               onClick={refreshLibrary}
               className="flex items-center justify-center gap-2 rounded-xl border border-[#17243D]/10 bg-[#FFFAF1] px-4 py-3 text-sm font-semibold transition hover:border-[#F47768]"
             >
-              <RefreshCw size={17} />
+              <RefreshCw
+                size={17}
+                className={loading ? "animate-spin" : ""}
+              />
               Refresh Library
-            </button>
-          </section>
+            </motion.button>
+          </motion.section>
 
           {/* STATISTICS */}
 
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl bg-[#17243D] p-5 text-white">
+          <motion.section
+            variants={activeContainerVariants}
+            initial={shouldReduceMotion ? false : "hidden"}
+            animate="visible"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-3"
+          >
+            <motion.div
+              variants={activeItemVariants}
+              whileHover={
+                shouldReduceMotion ? undefined : { y: -5, scale: 1.02 }
+              }
+              className="rounded-2xl bg-[#17243D] p-5 text-white shadow-sm transition-shadow hover:shadow-xl"
+            >
               <BookOpen className="mb-4 text-[#F47768]" size={25} />
 
-              <p className="text-3xl font-bold">
+              <motion.p
+                key={packs.length}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-3xl font-bold"
+              >
                 {packs.length}
-              </p>
+              </motion.p>
 
               <p className="mt-1 text-sm text-gray-300">
                 Available Packs
               </p>
-            </div>
+            </motion.div>
 
-            <div className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5">
+            <motion.div
+              variants={activeItemVariants}
+              whileHover={
+                shouldReduceMotion ? undefined : { y: -5, scale: 1.02 }
+              }
+              className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition-shadow hover:shadow-lg"
+            >
               <CheckCircle2 className="mb-4 text-green-600" size={25} />
 
-              <p className="text-3xl font-bold">
+              <motion.p
+                key={localPacks.length}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-3xl font-bold"
+              >
                 {localPacks.length}
-              </p>
+              </motion.p>
 
               <p className="mt-1 text-sm text-gray-500">
                 Downloaded Packs
               </p>
-            </div>
+            </motion.div>
 
-            <div className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5">
+            <motion.div
+              variants={activeItemVariants}
+              whileHover={
+                shouldReduceMotion ? undefined : { y: -5, scale: 1.02 }
+              }
+              className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition-shadow hover:shadow-lg"
+            >
               <HardDrive className="mb-4 text-[#F47768]" size={25} />
 
               <p className="text-3xl font-bold">
@@ -335,28 +428,45 @@ function LibraryPage() {
               <p className="mt-1 text-sm text-gray-500">
                 Downloaded File Size
               </p>
-            </div>
-          </section>
+            </motion.div>
+          </motion.section>
 
           {/* NOTIFICATIONS */}
 
-          {error && (
-            <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <AlertCircle size={19} className="mt-0.5 shrink-0" />
-              {error}
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+                className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+              >
+                <AlertCircle size={19} className="mt-0.5 shrink-0" />
+                {error}
+              </motion.div>
+            )}
 
-          {success && (
-            <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-              <CheckCircle2 size={19} className="mt-0.5 shrink-0" />
-              {success}
-            </div>
-          )}
+            {success && (
+              <motion.div
+                initial={shouldReduceMotion ? false : { opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+                className="flex items-start gap-3 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700"
+              >
+                <CheckCircle2 size={19} className="mt-0.5 shrink-0" />
+                {success}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* FILTERS */}
 
-          <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5">
+          <motion.section
+            variants={activeItemVariants}
+            initial={shouldReduceMotion ? false : "hidden"}
+            animate="visible"
+            className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5"
+          >
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="relative">
                 <Search
@@ -397,11 +507,15 @@ function LibraryPage() {
                 ))}
               </select>
             </div>
-          </section>
+          </motion.section>
 
           {/* AVAILABLE KNOWLEDGE PACKS */}
 
-          <section>
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+          >
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">
@@ -413,125 +527,204 @@ function LibraryPage() {
                 </p>
               </div>
 
-              <span className="rounded-full bg-[#F47768]/10 px-3 py-1 text-xs font-semibold text-[#F47768]">
+              <motion.span
+                key={packs.length}
+                initial={shouldReduceMotion ? false : { scale: 0.8 }}
+                animate={{ scale: 1 }}
+                className="rounded-full bg-[#F47768]/10 px-3 py-1 text-xs font-semibold text-[#F47768]"
+              >
                 {packs.length} packs
-              </span>
+              </motion.span>
             </div>
 
-            {loading ? (
-              <div className="rounded-2xl bg-[#FFFAF1] p-12 text-center">
-                <RefreshCw
-                  size={28}
-                  className="mx-auto mb-3 animate-spin text-[#F47768]"
-                />
+            <AnimatePresence mode="wait">
+              {loading ? (
+                <motion.div
+                  key="loading"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-2xl bg-[#FFFAF1] p-12 text-center"
+                >
+                  <RefreshCw
+                    size={28}
+                    className="mx-auto mb-3 animate-spin text-[#F47768]"
+                  />
 
-                <p className="text-sm text-gray-500">
-                  Loading knowledge packs...
-                </p>
-              </div>
-            ) : packs.length === 0 ? (
-              <div className="rounded-2xl bg-[#FFFAF1] p-12 text-center">
-                <BookOpen
-                  size={35}
-                  className="mx-auto mb-3 text-gray-400"
-                />
+                  <p className="text-sm text-gray-500">
+                    Loading knowledge packs...
+                  </p>
+                </motion.div>
+              ) : packs.length === 0 ? (
+                <motion.div
+                  key="empty"
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-2xl bg-[#FFFAF1] p-12 text-center"
+                >
+                  <motion.div
+                    animate={
+                      shouldReduceMotion ? undefined : { y: [0, -5, 0] }
+                    }
+                    transition={{
+                      duration: 2.5,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
+                  >
+                    <BookOpen
+                      size={35}
+                      className="mx-auto mb-3 text-gray-400"
+                    />
+                  </motion.div>
 
-                <h3 className="font-semibold">
-                  No knowledge packs found
-                </h3>
+                  <h3 className="font-semibold">
+                    No knowledge packs found
+                  </h3>
 
-                <p className="mt-2 text-sm text-gray-500">
-                  Try changing your search or filters.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {packs.map((pack) => {
-                  const isDownloaded = downloadedIds.has(pack._id);
-                  const isDownloading = downloadingId === pack._id;
+                  <p className="mt-2 text-sm text-gray-500">
+                    Try changing your search or filters.
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="packs"
+                  variants={activeContainerVariants}
+                  initial={shouldReduceMotion ? false : "hidden"}
+                  animate="visible"
+                  exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+                  className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3"
+                >
+                  {packs.map((pack) => {
+                    const isDownloaded = downloadedIds.has(pack._id);
+                    const isDownloading = downloadingId === pack._id;
 
-                  return (
-                    <article
-                      key={pack._id}
-                      className="flex flex-col rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
-                    >
-                      <div className="mb-5 flex items-start justify-between">
-                        <div className="rounded-xl bg-[#F47768]/10 p-3 text-[#F47768]">
-                          <BookOpen size={25} />
-                        </div>
-
-                        {isDownloaded && (
-                          <span className="flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-                            <CheckCircle2 size={13} />
-                            Downloaded
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex-1">
-                        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#F47768]">
-                          {pack.category}
-                        </p>
-
-                        <h3 className="text-lg font-bold">
-                          {pack.title}
-                        </h3>
-
-                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-500">
-                          {pack.description}
-                        </p>
-
-                        <div className="mt-5 flex flex-wrap gap-2">
-                          <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
-                            {pack.language}
-                          </span>
-
-                          <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
-                            Version {pack.version}
-                          </span>
-                        </div>
-
-                        <p className="mt-4 text-xs text-gray-400">
-                          File size: {formatFileSize(pack.fileSizeBytes)}
-                        </p>
-                      </div>
-
-                      <button
-                        disabled={isDownloaded || isDownloading}
-                        onClick={() => handleDownload(pack)}
-                        className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                          isDownloaded
-                            ? "cursor-not-allowed bg-green-100 text-green-700"
-                            : "bg-[#17243D] text-white hover:bg-[#F47768] disabled:opacity-60"
-                        }`}
+                    return (
+                      <motion.article
+                        key={pack._id}
+                        variants={activeItemVariants}
+                        whileHover={
+                          shouldReduceMotion
+                            ? undefined
+                            : { y: -6, scale: 1.015 }
+                        }
+                        transition={{ duration: 0.22 }}
+                        className="flex flex-col rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition-shadow duration-200 hover:shadow-lg"
                       >
-                        {isDownloaded ? (
-                          <>
-                            <CheckCircle2 size={17} />
-                            Saved Offline
-                          </>
-                        ) : isDownloading ? (
-                          <>
-                            <RefreshCw size={17} className="animate-spin" />
-                            Downloading...
-                          </>
-                        ) : (
-                          <>
-                            <Download size={17} />
-                            Download Pack
-                          </>
-                        )}
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
+                        <div className="mb-5 flex items-start justify-between">
+                          <motion.div
+                            whileHover={
+                              shouldReduceMotion
+                                ? undefined
+                                : { rotate: -7, scale: 1.1 }
+                            }
+                            className="rounded-xl bg-[#F47768]/10 p-3 text-[#F47768]"
+                          >
+                            <BookOpen size={25} />
+                          </motion.div>
+
+                          <AnimatePresence>
+                            {isDownloaded && (
+                              <motion.span
+                                initial={
+                                  shouldReduceMotion
+                                    ? false
+                                    : { opacity: 0, scale: 0.8 }
+                                }
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8 }}
+                                className="flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700"
+                              >
+                                <CheckCircle2 size={13} />
+                                Downloaded
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        <div className="flex-1">
+                          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#F47768]">
+                            {pack.category}
+                          </p>
+
+                          <h3 className="text-lg font-bold">
+                            {pack.title}
+                          </h3>
+
+                          <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-500">
+                            {pack.description}
+                          </p>
+
+                          <div className="mt-5 flex flex-wrap gap-2">
+                            <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
+                              {pack.language}
+                            </span>
+
+                            <span className="rounded-lg bg-[#F8F1E5] px-3 py-1 text-xs text-gray-600">
+                              Version {pack.version}
+                            </span>
+                          </div>
+
+                          <p className="mt-4 text-xs text-gray-400">
+                            File size: {formatFileSize(pack.fileSizeBytes)}
+                          </p>
+                        </div>
+
+                        <motion.button
+                          whileHover={
+                            shouldReduceMotion || isDownloaded || isDownloading
+                              ? undefined
+                              : { scale: 1.02 }
+                          }
+                          whileTap={
+                            shouldReduceMotion || isDownloaded || isDownloading
+                              ? undefined
+                              : { scale: 0.97 }
+                          }
+                          disabled={isDownloaded || isDownloading}
+                          onClick={() => handleDownload(pack)}
+                          className={`mt-6 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                            isDownloaded
+                              ? "cursor-not-allowed bg-green-100 text-green-700"
+                              : "bg-[#17243D] text-white hover:bg-[#F47768] disabled:opacity-60"
+                          }`}
+                        >
+                          {isDownloaded ? (
+                            <>
+                              <CheckCircle2 size={17} />
+                              Saved Offline
+                            </>
+                          ) : isDownloading ? (
+                            <>
+                              <RefreshCw
+                                size={17}
+                                className="animate-spin"
+                              />
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download size={17} />
+                              Download Pack
+                            </>
+                          )}
+                        </motion.button>
+                      </motion.article>
+                    );
+                  })}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
 
           {/* DOWNLOADED KNOWLEDGE PACKS */}
 
-          <section>
+          <motion.section
+            initial={shouldReduceMotion ? false : { opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.1 }}
+          >
             <div className="mb-5">
               <h2 className="text-xl font-bold">
                 My Offline Library
@@ -542,75 +735,124 @@ function LibraryPage() {
               </p>
             </div>
 
-            {localPacks.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-[#17243D]/20 bg-[#FFFAF1] p-10 text-center">
-                <HardDrive
-                  size={35}
-                  className="mx-auto mb-3 text-gray-400"
-                />
-
-                <h3 className="font-semibold">
-                  Your offline library is empty
-                </h3>
-
-                <p className="mt-2 text-sm text-gray-500">
-                  Download a knowledge pack to access it without internet.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {localPacks.map((pack) => (
-                  <div
-                    key={pack.id}
-                    className="flex flex-col justify-between gap-4 rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 sm:flex-row sm:items-center"
+            <AnimatePresence mode="wait">
+              {localPacks.length === 0 ? (
+                <motion.div
+                  key="empty-local"
+                  initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-2xl border border-dashed border-[#17243D]/20 bg-[#FFFAF1] p-10 text-center"
+                >
+                  <motion.div
+                    animate={
+                      shouldReduceMotion ? undefined : { y: [0, -5, 0] }
+                    }
+                    transition={{
+                      duration: 2.8,
+                      repeat: Infinity,
+                      ease: "easeInOut",
+                    }}
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="rounded-xl bg-green-100 p-3 text-green-700">
-                        <BookOpen size={22} />
+                    <HardDrive
+                      size={35}
+                      className="mx-auto mb-3 text-gray-400"
+                    />
+                  </motion.div>
+
+                  <h3 className="font-semibold">
+                    Your offline library is empty
+                  </h3>
+
+                  <p className="mt-2 text-sm text-gray-500">
+                    Download a knowledge pack to access it without internet.
+                  </p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="local-packs"
+                  variants={activeContainerVariants}
+                  initial={shouldReduceMotion ? false : "hidden"}
+                  animate="visible"
+                  className="space-y-3"
+                >
+                  {localPacks.map((pack) => (
+                    <motion.div
+                      key={pack.id}
+                      layout={!shouldReduceMotion}
+                      variants={activeItemVariants}
+                      whileHover={
+                        shouldReduceMotion ? undefined : { x: 3 }
+                      }
+                      className="flex flex-col justify-between gap-4 rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm transition-shadow hover:shadow-md sm:flex-row sm:items-center"
+                    >
+                      <div className="flex items-center gap-4">
+                        <motion.div
+                          whileHover={
+                            shouldReduceMotion
+                              ? undefined
+                              : { rotate: 8, scale: 1.08 }
+                          }
+                          className="rounded-xl bg-green-100 p-3 text-green-700"
+                        >
+                          <BookOpen size={22} />
+                        </motion.div>
+
+                        <div>
+                          <h3 className="font-semibold">
+                            {pack.title}
+                          </h3>
+
+                          <p className="mt-1 text-xs text-gray-500">
+                            {pack.category} Â· {pack.language} Â·{" "}
+                            {formatFileSize(pack.fileSizeBytes)}
+                          </p>
+
+                          <p className="mt-1 text-xs text-gray-400">
+                            Saved on{" "}
+                            {new Date(pack.downloadedAt).toLocaleDateString()}
+                          </p>
+                        </div>
                       </div>
 
-                      <div>
-                        <h3 className="font-semibold">
-                          {pack.title}
-                        </h3>
+                      {/* PACK ACTIONS */}
 
-                        <p className="mt-1 text-xs text-gray-500">
-                          {pack.category} · {pack.language} ·{" "}
-                          {formatFileSize(pack.fileSizeBytes)}
-                        </p>
+                      <div className="flex flex-wrap gap-2">
+                        <motion.button
+                          whileHover={
+                            shouldReduceMotion ? undefined : { scale: 1.04 }
+                          }
+                          whileTap={
+                            shouldReduceMotion ? undefined : { scale: 0.96 }
+                          }
+                          onClick={() => navigate(`/library/read/${pack.id}`)}
+                          className="flex items-center justify-center gap-2 rounded-xl bg-[#17243D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#F47768]"
+                        >
+                          <BookOpen size={16} />
+                          Open Pack
+                        </motion.button>
 
-                        <p className="mt-1 text-xs text-gray-400">
-                          Saved on{" "}
-                          {new Date(pack.downloadedAt).toLocaleDateString()}
-                        </p>
+                        <motion.button
+                          whileHover={
+                            shouldReduceMotion ? undefined : { scale: 1.04 }
+                          }
+                          whileTap={
+                            shouldReduceMotion ? undefined : { scale: 0.96 }
+                          }
+                          onClick={() => handleRemove(pack)}
+                          className="flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
+                        >
+                          <Trash2 size={16} />
+                          Remove
+                        </motion.button>
                       </div>
-                    </div>
-
-                    {/* PACK ACTIONS */}
-
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => navigate(`/library/read/${pack.id}`)}
-                        className="flex items-center justify-center gap-2 rounded-xl bg-[#17243D] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#F47768]"
-                      >
-                        <BookOpen size={16} />
-                        Open Pack
-                      </button>
-
-                      <button
-                        onClick={() => handleRemove(pack)}
-                        className="flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50"
-                      >
-                        <Trash2 size={16} />
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        </div>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.section>
+        </motion.div>
       </main>
     </div>
   );

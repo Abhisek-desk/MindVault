@@ -1,13 +1,85 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, User, Mail, Lock, ArrowRight } from "lucide-react";
-import { motion } from "motion/react";
+import {
+  Eye,
+  EyeOff,
+  User,
+  Mail,
+  Lock,
+  ArrowRight,
+  Loader2,
+} from "lucide-react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
 
 import AuthLayout from "../components/AuthLayout";
 import { useAuthStore } from "../../../stores/auth.store";
 
+const containerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+    },
+  },
+};
+
+const itemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 14,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.38,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
+function PasswordToggle({
+  visible,
+  onToggle,
+  shouldReduceMotion,
+}: {
+  visible: boolean;
+  onToggle: () => void;
+  shouldReduceMotion: boolean;
+}) {
+  return (
+    <motion.button
+      type="button"
+      whileHover={shouldReduceMotion ? undefined : { scale: 1.12 }}
+      whileTap={shouldReduceMotion ? undefined : { scale: 0.9 }}
+      onClick={onToggle}
+      className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#17243D]"
+      aria-label={visible ? "Hide password" : "Show password"}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={visible ? "hidden" : "visible"}
+          initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={shouldReduceMotion ? undefined : { opacity: 0, scale: 0.7 }}
+          className="block"
+        >
+          {visible ? <EyeOff size={19} /> : <Eye size={19} />}
+        </motion.span>
+      </AnimatePresence>
+    </motion.button>
+  );
+}
+
 function RegisterPage() {
   const navigate = useNavigate();
+
+  const shouldReduceMotion = useReducedMotion();
 
   const register = useAuthStore((state) => state.register);
 
@@ -86,11 +158,17 @@ function RegisterPage() {
       title="Create your account"
       subtitle="Start building your personal knowledge library."
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <motion.form
+        onSubmit={handleSubmit}
+        variants={shouldReduceMotion ? undefined : containerVariants}
+        initial={shouldReduceMotion ? false : "hidden"}
+        animate="visible"
+        className="space-y-5"
+      >
 
         {/* NAME */}
-        <div>
-          <label className="block text-sm font-semibold text-[#17243D] mb-2">
+        <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+          <label className="mb-2 block text-sm font-semibold text-[#17243D]">
             Full name
           </label>
 
@@ -108,14 +186,14 @@ function RegisterPage() {
               autoComplete="name"
               maxLength={80}
               required
-              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-[#FFFAF1] outline-none focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20 transition"
+              className="w-full rounded-xl border border-gray-200 bg-[#FFFAF1] py-3 pl-12 pr-4 outline-none transition focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20"
             />
           </div>
-        </div>
+        </motion.div>
 
         {/* EMAIL */}
-        <div>
-          <label className="block text-sm font-semibold text-[#17243D] mb-2">
+        <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+          <label className="mb-2 block text-sm font-semibold text-[#17243D]">
             Email address
           </label>
 
@@ -133,14 +211,14 @@ function RegisterPage() {
               autoComplete="email"
               maxLength={254}
               required
-              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-[#FFFAF1] outline-none focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20 transition"
+              className="w-full rounded-xl border border-gray-200 bg-[#FFFAF1] py-3 pl-12 pr-4 outline-none transition focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20"
             />
           </div>
-        </div>
+        </motion.div>
 
         {/* PASSWORD */}
-        <div>
-          <label className="block text-sm font-semibold text-[#17243D] mb-2">
+        <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+          <label className="mb-2 block text-sm font-semibold text-[#17243D]">
             Password
           </label>
 
@@ -158,23 +236,20 @@ function RegisterPage() {
               autoComplete="new-password"
               maxLength={72}
               required
-              className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-200 bg-[#FFFAF1] outline-none focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20 transition"
+              className="w-full rounded-xl border border-gray-200 bg-[#FFFAF1] py-3 pl-12 pr-12 outline-none transition focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20"
             />
 
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#17243D]"
-              aria-label={showPassword ? "Hide password" : "Show password"}
-            >
-              {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
-            </button>
+            <PasswordToggle
+              visible={showPassword}
+              onToggle={() => setShowPassword(!showPassword)}
+              shouldReduceMotion={Boolean(shouldReduceMotion)}
+            />
           </div>
-        </div>
+        </motion.div>
 
         {/* CONFIRM PASSWORD */}
-        <div>
-          <label className="block text-sm font-semibold text-[#17243D] mb-2">
+        <motion.div variants={shouldReduceMotion ? undefined : itemVariants}>
+          <label className="mb-2 block text-sm font-semibold text-[#17243D]">
             Confirm password
           </label>
 
@@ -192,60 +267,118 @@ function RegisterPage() {
               autoComplete="new-password"
               maxLength={72}
               required
-              className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-200 bg-[#FFFAF1] outline-none focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20 transition"
+              className="w-full rounded-xl border border-gray-200 bg-[#FFFAF1] py-3 pl-12 pr-12 outline-none transition focus:border-[#F47768] focus:ring-2 focus:ring-[#F47768]/20"
             />
 
-            <button
-              type="button"
-              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-[#17243D]"
-              aria-label={showConfirmPassword ? "Hide password" : "Show password"}
-            >
-              {showConfirmPassword ? <EyeOff size={19} /> : <Eye size={19} />}
-            </button>
+            <PasswordToggle
+              visible={showConfirmPassword}
+              onToggle={() => setShowConfirmPassword(!showConfirmPassword)}
+              shouldReduceMotion={Boolean(shouldReduceMotion)}
+            />
           </div>
-        </div>
+        </motion.div>
 
         {/* ERROR */}
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -5 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-3 text-sm"
-            role="alert"
-          >
-            {error}
-          </motion.div>
-        )}
+        <AnimatePresence>
+          {error && (
+            <motion.div
+              initial={
+                shouldReduceMotion
+                  ? false
+                  : { opacity: 0, y: -8, scale: 0.98 }
+              }
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={
+                shouldReduceMotion
+                  ? undefined
+                  : { opacity: 0, y: -8 }
+              }
+              transition={{ duration: 0.2 }}
+              className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600"
+              role="alert"
+            >
+              {error}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* SUBMIT */}
-        <button
+        <motion.button
           type="submit"
           disabled={isSubmitting}
-          className="w-full flex items-center justify-center gap-2 bg-[#F47768] hover:bg-[#e96657] disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition shadow-lg shadow-[#F47768]/20"
+          whileHover={
+            shouldReduceMotion || isSubmitting
+              ? undefined
+              : { y: -2, scale: 1.01 }
+          }
+          whileTap={
+            shouldReduceMotion || isSubmitting
+              ? undefined
+              : { scale: 0.97 }
+          }
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#F47768] py-3.5 font-semibold text-white shadow-lg shadow-[#F47768]/20 transition hover:bg-[#e96657] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {isSubmitting ? (
-            "Creating account..."
-          ) : (
-            <>
-              Create account
-              <ArrowRight size={19} />
-            </>
-          )}
-        </button>
+          <AnimatePresence mode="wait" initial={false}>
+            {isSubmitting ? (
+              <motion.span
+                key="submitting"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2"
+              >
+                <Loader2
+                  size={18}
+                  className={shouldReduceMotion ? "" : "animate-spin"}
+                />
+                Creating account...
+              </motion.span>
+            ) : (
+              <motion.span
+                key="create"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex items-center gap-2"
+              >
+                Create account
+                <motion.span
+                  animate={
+                    shouldReduceMotion ? undefined : { x: [0, 4, 0] }
+                  }
+                  transition={{
+                    duration: 1.5,
+                    repeat: shouldReduceMotion ? 0 : Infinity,
+                    repeatDelay: 1,
+                  }}
+                >
+                  <ArrowRight size={19} />
+                </motion.span>
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
 
         {/* LOGIN LINK */}
-        <p className="text-center text-sm text-gray-500 pt-2">
+        <motion.p
+          variants={shouldReduceMotion ? undefined : itemVariants}
+          className="pt-2 text-center text-sm text-gray-500"
+        >
           Already have an account?{" "}
-          <Link
-            to="/login"
-            className="font-semibold text-[#F47768] hover:underline"
+          <motion.span
+            whileHover={shouldReduceMotion ? undefined : { y: -1 }}
+            className="inline-block"
           >
-            Sign in
-          </Link>
-        </p>
+            <Link
+              to="/login"
+              className="font-semibold text-[#F47768] hover:underline"
+            >
+              Sign in
+            </Link>
+          </motion.span>
+        </motion.p>
 
-      </form>
+      </motion.form>
     </AuthLayout>
   );
 }

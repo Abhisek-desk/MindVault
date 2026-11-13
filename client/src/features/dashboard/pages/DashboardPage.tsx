@@ -1,5 +1,9 @@
 import { useState } from "react";
-import { motion } from "motion/react";
+import {
+  motion,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
 
 import Sidebar from "../components/Sidebar";
 import DashboardHeader from "../components/DashboardHeader";
@@ -8,8 +12,34 @@ import StatsCards from "../components/StatsCards";
 import RecentNotes from "../components/RecentNotes";
 import QuickActions from "../components/QuickActions";
 
+const containerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.12,
+      delayChildren: 0.08,
+    },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 20,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.5,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
 function DashboardPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const shouldReduceMotion = useReducedMotion();
 
   return (
     <div className="flex min-h-screen bg-[#F8F1E5]">
@@ -24,16 +54,27 @@ function DashboardPage() {
         />
 
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4 }}
+          variants={shouldReduceMotion ? undefined : containerVariants}
+          initial={shouldReduceMotion ? false : "hidden"}
+          animate="visible"
           className="mx-auto max-w-[1600px] space-y-8 p-5 md:p-8"
         >
-          <WelcomeSection />
+          <motion.section
+            variants={shouldReduceMotion ? undefined : sectionVariants}
+          >
+            <WelcomeSection />
+          </motion.section>
 
-          <StatsCards />
+          <motion.section
+            variants={shouldReduceMotion ? undefined : sectionVariants}
+          >
+            <StatsCards />
+          </motion.section>
 
-          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">
+          <motion.div
+            variants={shouldReduceMotion ? undefined : sectionVariants}
+            className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3"
+          >
             <div className="xl:col-span-2">
               <RecentNotes />
             </div>
@@ -41,12 +82,15 @@ function DashboardPage() {
             <div className="xl:col-span-1">
               <QuickActions />
             </div>
-          </div>
+          </motion.div>
 
-          <footer className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-[#596273]">
+          <motion.footer
+            variants={shouldReduceMotion ? undefined : sectionVariants}
+            className="border-t border-[#17243D]/10 pt-5 text-center text-xs text-[#596273]"
+          >
             © {new Date().getFullYear()} Mind Vault. Your Knowledge.
             Your Memory. Always Available.
-          </footer>
+          </motion.footer>
         </motion.div>
       </main>
     </div>

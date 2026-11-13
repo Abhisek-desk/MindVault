@@ -3,6 +3,10 @@ import { useEffect } from "react";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSyncStore } from "../../stores/sync.store";
 
+import {
+  getLastSuccessfulSyncAt,
+} from "../../db/sync.db";
+
 async function checkInternetConnection(): Promise<boolean> {
   if (!navigator.onLine) {
     return false;
@@ -10,7 +14,10 @@ async function checkInternetConnection(): Promise<boolean> {
 
   const controller = new AbortController();
 
-  const timeout = window.setTimeout(() => controller.abort(), 4000);
+  const timeout = window.setTimeout(
+    () => controller.abort(),
+    4000,
+  );
 
   try {
     const response = await fetch("/api/v1/health", {
@@ -33,13 +40,32 @@ async function checkInternetConnection(): Promise<boolean> {
 }
 
 function SyncManager() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isAuthenticated = useAuthStore(
+    (state) => state.isAuthenticated,
+  );
 
-  const syncNow = useSyncStore((state) => state.syncNow);
-  const setOffline = useSyncStore((state) => state.setOffline);
+  const isDatabaseReady = useAuthStore(
+    (state) => state.isDatabaseReady,
+  );
+
+  const userId = useAuthStore(
+    (state) => state.user?.id,
+  );
+
+  const syncNow = useSyncStore(
+    (state) => state.syncNow,
+  );
+
+  const setOffline = useSyncStore(
+    (state) => state.setOffline,
+  );
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !isDatabaseReady || !userId) {
+      useSyncStore.setState({
+        lastSyncedAt: null,
+      });
+
       return;
     }
 
@@ -50,46 +76,64 @@ function SyncManager() {
 
     const RETRY_INTERVAL = 30000;
 
+    // Restore the account-specific last sync timestamp.
+    void getLastSuccessfulSyncAt()
+      .then((timestamp) => {
+        if (mounted) {
+          useSyncStore.setState({
+            lastSyncedAt: timestamp,
+          });
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          useSyncStore.setState({
+            lastSyncedAt: null,
+          });
+        }
+      });
+
     const verifyAndSync = async () => {
-      if (checking || !mounted) return;
+      if (checking || !mounted) {
+        return;
+      }
 
       checking = true;
 
       try {
         const connected = await checkInternetConnection();
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         if (!connected) {
           wasOnline = false;
+
           setOffline();
+
           return;
         }
 
         const now = Date.now();
 
-        // Internet has just been restored.
         if (!wasOnline) {
           wasOnline = true;
           lastSyncAttempt = now;
 
-          if (import.meta.env.DEV) {
-            console.log("Internet restored. Starting synchronization.");
-          }
-
           await syncNow();
+
           return;
         }
 
-        // Retry failed synchronization every 30 seconds.
-        const syncStatus = useSyncStore.getState().status;
+        const syncStatus =
+          useSyncStore.getState().status;
 
-        if (syncStatus === "error" && now - lastSyncAttempt >= RETRY_INTERVAL) {
+        if (
+          syncStatus === "error" &&
+          now - lastSyncAttempt >= RETRY_INTERVAL
+        ) {
           lastSyncAttempt = now;
-
-          if (import.meta.env.DEV) {
-            console.log("Retrying failed synchronization.");
-          }
 
           await syncNow();
         }
@@ -100,6 +144,7 @@ function SyncManager() {
 
     const handleOffline = () => {
       wasOnline = false;
+
       setOffline();
     };
 
@@ -107,11 +152,8 @@ function SyncManager() {
       void verifyAndSync();
     };
 
-    // Check immediately when authenticated.
     void verifyAndSync();
 
-    // Check connectivity every 10 seconds.
-    // Check connectivity every 30 seconds.
     const interval = window.setInterval(() => {
       void verifyAndSync();
     }, 30000);
@@ -127,7 +169,13 @@ function SyncManager() {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [isAuthenticated, syncNow, setOffline]);
+  }, [
+    isAuthenticated,
+    isDatabaseReady,
+    userId,
+    syncNow,
+    setOffline,
+  ]);
 
   return null;
 }

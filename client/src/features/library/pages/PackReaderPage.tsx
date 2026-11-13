@@ -7,6 +7,11 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import {
+  AnimatePresence,
+  motion,
+  useReducedMotion,
+} from "motion/react";
 import JSZip from "jszip";
 
 import { getLocalPackById } from "../../../db/packs.db";
@@ -14,6 +19,7 @@ import { getLocalPackById } from "../../../db/packs.db";
 function PackReaderPage() {
   const { packId } = useParams();
   const navigate = useNavigate();
+  const shouldReduceMotion = useReducedMotion();
 
   const zipRef = useRef<JSZip | null>(null);
   const documentRequestRef = useRef(0);
@@ -26,6 +32,18 @@ function PackReaderPage() {
   const [loading, setLoading] = useState(true);
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const panelVariants = {
+    hidden: { opacity: 0, y: 18 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.45,
+        ease: [0.22, 1, 0.36, 1] as const,
+      },
+    },
+  };
 
   // LOAD DOWNLOADED KNOWLEDGE PACK
   useEffect(() => {
@@ -48,7 +66,7 @@ function PackReaderPage() {
 
         if (!pack.contentBlob) {
           throw new Error(
-            "Downloaded file is not available on this device."
+            "Downloaded file is not available on this device.",
           );
         }
 
@@ -56,7 +74,7 @@ function PackReaderPage() {
 
         if (pack.contentBlob.size > MAX_PACK_SIZE) {
           throw new Error(
-            "Knowledge pack exceeds the maximum allowed size."
+            "Knowledge pack exceeds the maximum allowed size.",
           );
         }
 
@@ -67,14 +85,14 @@ function PackReaderPage() {
         const files = Object.values(zip.files)
           .filter(
             (file) =>
-              !file.dir && /\.(md|markdown|txt)$/i.test(file.name)
+              !file.dir && /\.(md|markdown|txt)$/i.test(file.name),
           )
           .map((file) => file.name)
           .sort();
 
         if (files.length === 0) {
           throw new Error(
-            "No readable Markdown or text documents found."
+            "No readable Markdown or text documents found.",
           );
         }
 
@@ -100,7 +118,7 @@ function PackReaderPage() {
         setError(
           err instanceof Error
             ? err.message
-            : "Could not open this knowledge pack."
+            : "Could not open this knowledge pack.",
         );
       } finally {
         if (!cancelled) {
@@ -120,7 +138,6 @@ function PackReaderPage() {
 
   // OPEN SELECTED DOCUMENT
   const handleDocumentSelect = async (fileName: string) => {
-    // Avoid loading the currently selected document again.
     if (fileName === selectedDocument) {
       return;
     }
@@ -147,14 +164,12 @@ function PackReaderPage() {
 
       const text = await file.async("string");
 
-      // Ignore results from older requests.
       if (requestId !== documentRequestRef.current) {
         return;
       }
 
       setContent(text);
     } catch (err) {
-      // Ignore errors from older requests.
       if (requestId !== documentRequestRef.current) {
         return;
       }
@@ -162,10 +177,9 @@ function PackReaderPage() {
       setError(
         err instanceof Error
           ? err.message
-          : "Could not open document."
+          : "Could not open document.",
       );
     } finally {
-      // Only the latest request controls the loading state.
       if (requestId === documentRequestRef.current) {
         setContentLoading(false);
       }
@@ -175,15 +189,22 @@ function PackReaderPage() {
   return (
     <div className="min-h-screen bg-[#F8F1E5] text-[#17243D]">
       {/* HEADER */}
-      <header className="sticky top-0 z-10 border-b border-[#17243D]/10 bg-[#FFFAF1] px-5 py-4">
+      <motion.header
+        initial={shouldReduceMotion ? false : { opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: shouldReduceMotion ? 0 : 0.35 }}
+        className="sticky top-0 z-10 border-b border-[#17243D]/10 bg-[#FFFAF1] px-5 py-4"
+      >
         <div className="mx-auto flex max-w-7xl items-center gap-4">
-          <button
+          <motion.button
+            whileHover={shouldReduceMotion ? undefined : { x: -3 }}
+            whileTap={shouldReduceMotion ? undefined : { scale: 0.94 }}
             onClick={() => navigate("/library")}
             className="rounded-xl border border-[#17243D]/10 p-2 transition hover:bg-[#F8F1E5]"
             aria-label="Back to library"
           >
             <ArrowLeft size={20} />
-          </button>
+          </motion.button>
 
           <div>
             <p className="text-xs font-semibold text-[#F47768]">
@@ -195,103 +216,173 @@ function PackReaderPage() {
             </h1>
           </div>
         </div>
-      </header>
+      </motion.header>
 
       <main className="mx-auto max-w-7xl px-5 py-8">
-        {/* INITIAL LOADING */}
-        {loading ? (
-          <div className="rounded-2xl bg-[#FFFAF1] p-12 text-center">
-            <Loader2
-              size={30}
-              className="mx-auto mb-3 animate-spin text-[#F47768]"
-            />
-
-            <p>Opening your knowledge pack...</p>
-          </div>
-        ) : error && documents.length === 0 ? (
-          /* PACK LOADING ERROR */
-          <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700">
-            <AlertCircle className="mb-3" />
-
-            {error}
-
-            <button
-              onClick={() => navigate("/library")}
-              className="mt-5 block rounded-xl bg-[#17243D] px-5 py-2 text-sm font-semibold text-white"
+        <AnimatePresence mode="wait">
+          {loading ? (
+            <motion.div
+              key="loading"
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="rounded-2xl bg-[#FFFAF1] p-12 text-center"
             >
-              Return to Library
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
-            {/* DOCUMENT SIDEBAR */}
-            <aside className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 lg:col-span-1">
-              <div className="mb-5 flex items-center gap-2">
-                <BookOpen className="text-[#F47768]" size={21} />
+              <Loader2
+                size={30}
+                className="mx-auto mb-3 animate-spin text-[#F47768]"
+              />
 
-                <h2 className="font-bold">Contents</h2>
-              </div>
+              <p>Opening your knowledge pack...</p>
+            </motion.div>
+          ) : error && documents.length === 0 ? (
+            <motion.div
+              key="error"
+              initial={shouldReduceMotion ? false : { opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0 }}
+              className="rounded-2xl border border-red-200 bg-red-50 p-6 text-red-700"
+            >
+              <AlertCircle className="mb-3" />
 
-              <div className="space-y-2">
-                {documents.map((document) => (
-                  <button
-                    key={document}
-                    onClick={() => handleDocumentSelect(document)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
-                      selectedDocument === document
-                        ? "bg-[#17243D] text-white"
-                        : "hover:bg-[#F8F1E5]"
-                    }`}
-                  >
-                    <FileText size={17} className="shrink-0" />
+              {error}
 
-                    <span className="break-all">
-                      {document.split("/").pop()}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </aside>
+              <motion.button
+                whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+                whileTap={shouldReduceMotion ? undefined : { scale: 0.97 }}
+                onClick={() => navigate("/library")}
+                className="mt-5 block rounded-xl bg-[#17243D] px-5 py-2 text-sm font-semibold text-white"
+              >
+                Return to Library
+              </motion.button>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="reader"
+              initial={shouldReduceMotion ? false : "hidden"}
+              animate="visible"
+              variants={{
+                hidden: {},
+                visible: {
+                  transition: {
+                    staggerChildren: 0.12,
+                  },
+                },
+              }}
+              className="grid grid-cols-1 gap-6 lg:grid-cols-4"
+            >
+              {/* DOCUMENT SIDEBAR */}
+              <motion.aside
+                variants={shouldReduceMotion ? undefined : panelVariants}
+                className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 lg:col-span-1"
+              >
+                <div className="mb-5 flex items-center gap-2">
+                  <BookOpen className="text-[#F47768]" size={21} />
 
-            {/* DOCUMENT CONTENT */}
-            <section className="min-h-[500px] rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-6 sm:p-8 lg:col-span-3">
-              <div className="mb-6 border-b border-[#17243D]/10 pb-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#F47768]">
-                  Currently Reading
-                </p>
-
-                <h2 className="mt-2 break-all text-xl font-bold">
-                  {selectedDocument.split("/").pop()}
-                </h2>
-              </div>
-
-              {/* DOCUMENT ERROR */}
-              {error && documents.length > 0 && (
-                <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                  {error}
+                  <h2 className="font-bold">Contents</h2>
                 </div>
-              )}
 
-              {/* DOCUMENT LOADING */}
-              {contentLoading ? (
-                <div className="py-12 text-center">
-                  <Loader2
-                    size={28}
-                    className="mx-auto mb-3 animate-spin text-[#F47768]"
-                  />
+                <div className="space-y-2">
+                  {documents.map((document) => (
+                    <motion.button
+                      key={document}
+                      whileHover={
+                        shouldReduceMotion
+                          ? undefined
+                          : { x: 4 }
+                      }
+                      whileTap={
+                        shouldReduceMotion
+                          ? undefined
+                          : { scale: 0.98 }
+                      }
+                      onClick={() => handleDocumentSelect(document)}
+                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
+                        selectedDocument === document
+                          ? "bg-[#17243D] text-white"
+                          : "hover:bg-[#F8F1E5]"
+                      }`}
+                    >
+                      <FileText size={17} className="shrink-0" />
 
-                  <p className="text-sm">
-                    Loading document...
+                      <span className="break-all">
+                        {document.split("/").pop()}
+                      </span>
+                    </motion.button>
+                  ))}
+                </div>
+              </motion.aside>
+
+              {/* DOCUMENT CONTENT */}
+              <motion.section
+                variants={shouldReduceMotion ? undefined : panelVariants}
+                className="min-h-[500px] rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-6 sm:p-8 lg:col-span-3"
+              >
+                <div className="mb-6 border-b border-[#17243D]/10 pb-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[#F47768]">
+                    Currently Reading
                   </p>
+
+                  <h2 className="mt-2 break-all text-xl font-bold">
+                    {selectedDocument.split("/").pop()}
+                  </h2>
                 </div>
-              ) : (
-                <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-8 text-[#17243D]">
-                  {content}
-                </pre>
-              )}
-            </section>
-          </div>
-        )}
+
+                <AnimatePresence mode="wait">
+                  {error && documents.length > 0 ? (
+                    <motion.div
+                      key="document-error"
+                      initial={shouldReduceMotion ? false : { opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
+                    >
+                      {error}
+                    </motion.div>
+                  ) : null}
+                </AnimatePresence>
+
+                <AnimatePresence mode="wait">
+                  {contentLoading ? (
+                    <motion.div
+                      key="document-loading"
+                      initial={shouldReduceMotion ? false : { opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="py-12 text-center"
+                    >
+                      <Loader2
+                        size={28}
+                        className="mx-auto mb-3 animate-spin text-[#F47768]"
+                      />
+
+                      <p className="text-sm">
+                        Loading document...
+                      </p>
+                    </motion.div>
+                  ) : (
+                    <motion.pre
+                      key={selectedDocument}
+                      initial={
+                        shouldReduceMotion
+                          ? false
+                          : { opacity: 0, y: 8 }
+                      }
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
+                      transition={{
+                        duration: shouldReduceMotion ? 0 : 0.22,
+                      }}
+                      className="whitespace-pre-wrap break-words font-sans text-sm leading-8 text-[#17243D]"
+                    >
+                      {content}
+                    </motion.pre>
+                  )}
+                </AnimatePresence>
+              </motion.section>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

@@ -8,10 +8,18 @@
   --coral: #f47768;
   --white-cream: #fffaf1;
   --text-muted: #85858a;
+
+  --motion-fast: 160ms;
+  --motion-normal: 220ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
@@ -19,14 +27,88 @@ body {
   min-width: 320px;
   background: var(--cream);
   color: var(--navy);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 button {
   cursor: pointer;
+  transition:
+    transform var(--motion-fast) var(--motion-ease),
+    box-shadow var(--motion-normal) var(--motion-ease),
+    background-color var(--motion-normal) ease,
+    border-color var(--motion-normal) ease,
+    color var(--motion-normal) ease,
+    opacity var(--motion-normal) ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  transition:
+    color var(--motion-normal) ease,
+    opacity var(--motion-normal) ease,
+    background-color var(--motion-normal) ease;
+}
+
+input,
+textarea,
+select {
+  transition:
+    border-color var(--motion-normal) ease,
+    box-shadow var(--motion-normal) ease,
+    background-color var(--motion-normal) ease;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--coral);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: var(--coral);
+  color: white;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  button:hover:not(:disabled),
+  button:active:not(:disabled) {
+    transform: none;
+  }
 }

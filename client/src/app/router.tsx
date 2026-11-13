@@ -18,6 +18,7 @@ import {
   ConflictsPage,
   LearningPage,
   RoutePage,
+  SyncDiagnosticsPage,
 } from "./route-pages";
 
 // =====================================
@@ -119,6 +120,14 @@ const router = createBrowserRouter([
         element: (
           <RoutePage>
             <LearningPage />
+          </RoutePage>
+        ),
+      },
+      {
+        path: "/sync",
+        element: (
+          <RoutePage>
+            <SyncDiagnosticsPage />
           </RoutePage>
         ),
       },

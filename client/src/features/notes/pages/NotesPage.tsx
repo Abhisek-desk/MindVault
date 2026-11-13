@@ -15,6 +15,13 @@ import {
 
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import {
+  motion,
+  AnimatePresence,
+  useReducedMotion,
+  type Variants,
+} from "motion/react";
+
 import Sidebar from "../../dashboard/components/Sidebar";
 import DashboardHeader from "../../dashboard/components/DashboardHeader";
 
@@ -29,9 +36,59 @@ import { getLocalFolderById } from "../../../db/folder.db";
 
 import type { LocalNote, LocalFolder } from "../../../db/database";
 
+const containerVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.05,
+    },
+  },
+};
+
+const sectionVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 18,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.45,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
+const listVariants: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.055,
+    },
+  },
+};
+
+const noteVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 12,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.3,
+      ease: [0.22, 1, 0.36, 1],
+    },
+  },
+};
+
 function NotesPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const shouldReduceMotion = useReducedMotion();
 
   const requestedNoteId = searchParams.get("noteId");
   const requestedFolderId = searchParams.get("folderId");
@@ -58,6 +115,14 @@ function NotesPage() {
     useState<LocalFolder | null>(null);
 
   const isOnline = navigator.onLine;
+
+  const activeContainerVariants = shouldReduceMotion
+    ? undefined
+    : containerVariants;
+
+  const activeSectionVariants = shouldReduceMotion
+    ? undefined
+    : sectionVariants;
 
   // LOAD NOTES
   const loadNotes = async () => {
@@ -277,10 +342,18 @@ function NotesPage() {
       <main className="min-w-0 flex-1">
         <DashboardHeader onMenuClick={() => setIsSidebarOpen(true)} />
 
-        <div className="mx-auto max-w-[1600px] p-5 md:p-8">
+        <motion.div
+          variants={activeContainerVariants}
+          initial={shouldReduceMotion ? false : "hidden"}
+          animate="visible"
+          className="mx-auto max-w-[1600px] p-5 md:p-8"
+        >
           {/* PAGE HEADING */}
 
-          <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+          <motion.div
+            variants={activeSectionVariants}
+            className="mb-7 flex flex-wrap items-center justify-between gap-4"
+          >
             <div>
               <button
                 onClick={() => navigate("/dashboard")}
@@ -297,24 +370,29 @@ function NotesPage() {
               </p>
             </div>
 
-            <button
+            <motion.button
+              whileHover={shouldReduceMotion ? undefined : { scale: 1.04 }}
+              whileTap={shouldReduceMotion ? undefined : { scale: 0.96 }}
               onClick={handleNewNote}
               className="flex items-center gap-2 rounded-xl bg-[#F47768] px-5 py-3 font-semibold text-white transition hover:bg-[#e86657]"
             >
               <Plus size={19} />
               New Note
-            </button>
-          </div>
+            </motion.button>
+          </motion.div>
 
           {/* OFFLINE STATUS */}
 
-          <div className="mb-6 flex items-center gap-2 text-sm">
+          <motion.div
+            variants={activeSectionVariants}
+            className="mb-6 flex items-center gap-2 text-sm"
+          >
             {isOnline ? (
               <>
                 <Wifi size={17} className="text-green-600" />
 
                 <span className="text-green-700">
-                  Online — changes will synchronize when sync runs.
+                  Online â€” changes will synchronize when sync runs.
                 </span>
               </>
             ) : (
@@ -322,18 +400,25 @@ function NotesPage() {
                 <WifiOff size={17} className="text-orange-600" />
 
                 <span className="text-orange-700">
-                  Offline — your notes are saved locally.
+                  Offline â€” your notes are saved locally.
                 </span>
               </>
             )}
-          </div>
+          </motion.div>
 
           {/* NOTES WORKSPACE */}
 
-          <div className="grid min-h-[650px] grid-cols-1 gap-6 lg:grid-cols-3">
+          <motion.div
+            variants={activeSectionVariants}
+            className="grid min-h-[650px] grid-cols-1 gap-6 lg:grid-cols-3"
+          >
             {/* NOTES LIST */}
 
-            <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm">
+            <motion.section
+              whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+              transition={{ duration: 0.25 }}
+              className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm"
+            >
               <div className="mb-5 flex items-center justify-between">
                 <h2 className="font-bold text-[#17243D]">All Notes</h2>
 
@@ -361,9 +446,16 @@ function NotesPage() {
 
               {/* NOTE ITEMS */}
 
-              <div className="space-y-3">
+              <AnimatePresence mode="wait">
                 {filteredNotes.length === 0 ? (
-                  <div className="py-12 text-center">
+                  <motion.div
+                    key="empty-notes"
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="py-12 text-center"
+                  >
                     <FileText size={35} className="mx-auto text-gray-300" />
 
                     <p className="mt-3 text-sm font-medium text-gray-500">
@@ -371,179 +463,273 @@ function NotesPage() {
                         ? "No matching notes found."
                         : "No notes created yet."}
                     </p>
-                  </div>
+                  </motion.div>
                 ) : (
-                  filteredNotes.map((note) => (
-                    <button
-                      key={note.id}
-                      onClick={() => handleSelectNote(note)}
-                      className={`w-full rounded-xl border p-4 text-left transition ${
-                        selectedNoteId === note.id
-                          ? "border-[#F47768] bg-[#F47768]/5"
-                          : "border-[#17243D]/5 hover:border-[#F47768]/40 hover:bg-[#F8F1E5]/60"
-                      }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="rounded-lg bg-[#F47768]/10 p-2 text-[#F47768]">
-                          <FileText size={19} />
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-sm font-semibold text-[#17243D]">
-                            {note.title}
-                          </h3>
-
-                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-gray-500">
-                            {note.content || "No content"}
-                          </p>
-
-                          <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-                            <Clock size={12} />
-
-                            {formatDate(note.updatedAt)}
+                  <motion.div
+                    key="notes-list"
+                    variants={shouldReduceMotion ? undefined : listVariants}
+                    initial={shouldReduceMotion ? false : "hidden"}
+                    animate="visible"
+                    className="space-y-3"
+                  >
+                    {filteredNotes.map((note) => (
+                      <motion.button
+                        key={note.id}
+                        variants={shouldReduceMotion ? undefined : noteVariants}
+                        whileHover={
+                          shouldReduceMotion
+                            ? undefined
+                            : { x: 4, scale: 1.01 }
+                        }
+                        whileTap={
+                          shouldReduceMotion ? undefined : { scale: 0.985 }
+                        }
+                        transition={{ duration: 0.2 }}
+                        onClick={() => handleSelectNote(note)}
+                        className={`w-full rounded-xl border p-4 text-left transition ${
+                          selectedNoteId === note.id
+                            ? "border-[#F47768] bg-[#F47768]/5"
+                            : "border-[#17243D]/5 hover:border-[#F47768]/40 hover:bg-[#F8F1E5]/60"
+                        }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="rounded-lg bg-[#F47768]/10 p-2 text-[#F47768]">
+                            <FileText size={19} />
                           </div>
 
-                          <p className="mt-2 text-xs">
-                            {note.syncStatus === "synced" ? (
-                              <span className="text-green-600">Synced</span>
-                            ) : note.syncStatus === "conflict" ? (
-                              <span className="text-red-600">Conflict</span>
-                            ) : (
-                              <span className="text-orange-600">
-                                Pending sync
-                              </span>
-                            )}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="truncate text-sm font-semibold text-[#17243D]">
+                              {note.title}
+                            </h3>
+
+                            <p className="mt-2 line-clamp-2 text-xs leading-5 text-gray-500">
+                              {note.content || "No content"}
+                            </p>
+
+                            <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                              <Clock size={12} />
+
+                              {formatDate(note.updatedAt)}
+                            </div>
+
+                            <p className="mt-2 text-xs">
+                              {note.syncStatus === "synced" ? (
+                                <span className="text-green-600">Synced</span>
+                              ) : note.syncStatus === "conflict" ? (
+                                <span className="text-red-600">Conflict</span>
+                              ) : (
+                                <span className="text-orange-600">
+                                  Pending sync
+                                </span>
+                              )}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </button>
-                  ))
+                      </motion.button>
+                    ))}
+                  </motion.div>
                 )}
-              </div>
-            </section>
+              </AnimatePresence>
+            </motion.section>
 
             {/* NOTE EDITOR */}
 
-            <section className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm lg:col-span-2">
-              {!selectedNote && !isCreating ? (
-                <div className="flex h-full min-h-[500px] flex-col items-center justify-center text-center">
-                  <div className="rounded-2xl bg-[#F47768]/10 p-5 text-[#F47768]">
-                    <FileText size={35} />
-                  </div>
-
-                  <h2 className="mt-5 text-xl font-bold text-[#17243D]">
-                    Your Knowledge Workspace
-                  </h2>
-
-                  <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
-                    Select a note from the left or create a new note to start
-                    writing.
-                  </p>
-
-                  <button
-                    onClick={handleNewNote}
-                    className="mt-6 flex items-center gap-2 rounded-xl bg-[#F47768] px-5 py-3 text-sm font-semibold text-white hover:bg-[#e86657]"
+            <motion.section
+              whileHover={shouldReduceMotion ? undefined : { y: -2 }}
+              transition={{ duration: 0.25 }}
+              className="rounded-2xl border border-[#17243D]/5 bg-[#FFFAF1] p-5 shadow-sm lg:col-span-2"
+            >
+              <AnimatePresence mode="wait">
+                {!selectedNote && !isCreating ? (
+                  <motion.div
+                    key="editor-empty"
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex h-full min-h-[500px] flex-col items-center justify-center text-center"
                   >
-                    <Plus size={18} />
-                    Create a Note
-                  </button>
-                </div>
-              ) : (
-                <div className="flex h-full flex-col">
-                  {/* EDITOR HEADER */}
+                    <motion.div
+                      animate={
+                        shouldReduceMotion
+                          ? undefined
+                          : { y: [0, -5, 0] }
+                      }
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="rounded-2xl bg-[#F47768]/10 p-5 text-[#F47768]"
+                    >
+                      <FileText size={35} />
+                    </motion.div>
 
-                  <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#17243D]/10 pb-5">
-                    <div>
-                      <h2 className="font-bold text-[#17243D]">
-                        {isCreating ? "Create New Note" : "Edit Note"}
-                      </h2>
+                    <h2 className="mt-5 text-xl font-bold text-[#17243D]">
+                      Your Knowledge Workspace
+                    </h2>
 
-                      <p className="mt-1 text-xs text-gray-400">
-                        Your changes are saved to this device.
-                      </p>
-                    </div>
+                    <p className="mt-2 max-w-sm text-sm leading-6 text-gray-500">
+                      Select a note from the left or create a new note to start
+                      writing.
+                    </p>
 
-                    <div className="flex items-center gap-2">
-                      {selectedNoteId && (
-                        <button
-                          onClick={handleDelete}
-                          className="rounded-xl border border-red-200 p-3 text-red-500 transition hover:bg-red-50"
-                          title="Delete note"
+                    <motion.button
+                      whileHover={
+                        shouldReduceMotion ? undefined : { scale: 1.04 }
+                      }
+                      whileTap={
+                        shouldReduceMotion ? undefined : { scale: 0.96 }
+                      }
+                      onClick={handleNewNote}
+                      className="mt-6 flex items-center gap-2 rounded-xl bg-[#F47768] px-5 py-3 text-sm font-semibold text-white hover:bg-[#e86657]"
+                    >
+                      <Plus size={18} />
+                      Create a Note
+                    </motion.button>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key={selectedNoteId ?? "new-note"}
+                    initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={shouldReduceMotion ? undefined : { opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex h-full flex-col"
+                  >
+                    {/* EDITOR HEADER */}
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#17243D]/10 pb-5">
+                      <div>
+                        <h2 className="font-bold text-[#17243D]">
+                          {isCreating ? "Create New Note" : "Edit Note"}
+                        </h2>
+
+                        <p className="mt-1 text-xs text-gray-400">
+                          Your changes are saved to this device.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {selectedNoteId && (
+                          <motion.button
+                            whileHover={
+                              shouldReduceMotion ? undefined : { scale: 1.08 }
+                            }
+                            whileTap={
+                              shouldReduceMotion ? undefined : { scale: 0.94 }
+                            }
+                            onClick={handleDelete}
+                            className="rounded-xl border border-red-200 p-3 text-red-500 transition hover:bg-red-50"
+                            title="Delete note"
+                          >
+                            <Trash2 size={18} />
+                          </motion.button>
+                        )}
+
+                        <motion.button
+                          whileHover={
+                            shouldReduceMotion ? undefined : { scale: 1.04 }
+                          }
+                          whileTap={
+                            shouldReduceMotion ? undefined : { scale: 0.96 }
+                          }
+                          onClick={handleSave}
+                          disabled={isSaving}
+                          className="flex items-center gap-2 rounded-xl bg-[#17243D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#253858] disabled:opacity-50"
                         >
-                          <Trash2 size={18} />
-                        </button>
-                      )}
+                          <Save size={17} />
 
-                      <button
-                        onClick={handleSave}
-                        disabled={isSaving}
-                        className="flex items-center gap-2 rounded-xl bg-[#17243D] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#253858] disabled:opacity-50"
-                      >
-                        <Save size={17} />
-
-                        {isSaving ? "Saving..." : "Save Note"}
-                      </button>
+                          {isSaving ? "Saving..." : "Save Note"}
+                        </motion.button>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* FOLDER CONTEXT */}
+                    {/* FOLDER CONTEXT */}
 
-                  {selectedFolder && isCreating && (
-                    <div className="mb-5 flex items-center gap-2 rounded-xl border border-[#F47768]/20 bg-[#F47768]/5 p-3 text-sm">
-                      <Folder size={17} className="text-[#F47768]" />
+                    <AnimatePresence>
+                      {selectedFolder && isCreating && (
+                        <motion.div
+                          initial={
+                            shouldReduceMotion ? false : { opacity: 0, y: -8 }
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={
+                            shouldReduceMotion
+                              ? undefined
+                              : { opacity: 0, y: -8 }
+                          }
+                          transition={{ duration: 0.2 }}
+                          className="mb-5 flex items-center gap-2 rounded-xl border border-[#F47768]/20 bg-[#F47768]/5 p-3 text-sm"
+                        >
+                          <Folder size={17} className="text-[#F47768]" />
 
-                      <span className="text-gray-500">Saving in:</span>
+                          <span className="text-gray-500">Saving in:</span>
 
-                      <span className="font-semibold text-[#17243D]">
-                        {selectedFolder.name}
+                          <span className="font-semibold text-[#17243D]">
+                            {selectedFolder.name}
+                          </span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* TITLE */}
+
+                    <input
+                      type="text"
+                      placeholder="Give your note a title..."
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      maxLength={200}
+                      className="mb-5 w-full border-none bg-transparent text-2xl font-bold text-[#17243D] outline-none placeholder:text-gray-300"
+                    />
+
+                    {/* CONTENT */}
+
+                    <textarea
+                      value={content}
+                      onChange={(event) => setContent(event.target.value)}
+                      placeholder="Start writing your thoughts, ideas and knowledge here..."
+                      className="min-h-[350px] w-full flex-1 resize-none border-none bg-transparent text-base leading-8 text-[#17243D] outline-none placeholder:text-gray-400"
+                    />
+
+                    {/* ERROR */}
+
+                    <AnimatePresence>
+                      {error && (
+                        <motion.p
+                          initial={
+                            shouldReduceMotion ? false : { opacity: 0, y: 8 }
+                          }
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={
+                            shouldReduceMotion ? undefined : { opacity: 0, y: -5 }
+                          }
+                          transition={{ duration: 0.2 }}
+                          className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600"
+                        >
+                          {error}
+                        </motion.p>
+                      )}
+                    </AnimatePresence>
+
+                    {/* FOOTER */}
+
+                    <div className="mt-5 flex items-center justify-between border-t border-[#17243D]/10 pt-4 text-xs text-gray-400">
+                      <span>{content.length} characters</span>
+
+                      <span>
+                        {selectedNote
+                          ? `Last updated: ${formatDate(selectedNote.updatedAt)}`
+                          : "New note"}
                       </span>
                     </div>
-                  )}
-
-                  {/* TITLE */}
-
-                  <input
-                    type="text"
-                    placeholder="Give your note a title..."
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
-                    maxLength={200}
-                    className="mb-5 w-full border-none bg-transparent text-2xl font-bold text-[#17243D] outline-none placeholder:text-gray-300"
-                  />
-
-                  {/* CONTENT */}
-
-                  <textarea
-                    value={content}
-                    onChange={(event) => setContent(event.target.value)}
-                    placeholder="Start writing your thoughts, ideas and knowledge here..."
-                    className="min-h-[350px] w-full flex-1 resize-none border-none bg-transparent text-base leading-8 text-[#17243D] outline-none placeholder:text-gray-400"
-                  />
-
-                  {/* ERROR */}
-
-                  {error && (
-                    <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                      {error}
-                    </p>
-                  )}
-
-                  {/* FOOTER */}
-
-                  <div className="mt-5 flex items-center justify-between border-t border-[#17243D]/10 pt-4 text-xs text-gray-400">
-                    <span>{content.length} characters</span>
-
-                    <span>
-                      {selectedNote
-                        ? `Last updated: ${formatDate(selectedNote.updatedAt)}`
-                        : "New note"}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </section>
-          </div>
-        </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.section>
+          </motion.div>
+        </motion.div>
       </main>
     </div>
   );

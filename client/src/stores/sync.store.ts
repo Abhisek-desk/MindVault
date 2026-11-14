@@ -2,6 +2,7 @@ import { create } from "zustand";
 
 import { synchronizeData } from "../services/sync.service";
 import { useAuthStore } from "./auth.store";
+import { useNotificationsStore } from "./notifications.store";
 
 import {
   saveLastSuccessfulSyncAt,
@@ -49,6 +50,8 @@ export const useSyncStore = create<SyncState>((set, get) => ({
       return;
     }
 
+    const previousStatus = get().status;
+
     set({
       status: "syncing",
       error: null,
@@ -59,22 +62,24 @@ export const useSyncStore = create<SyncState>((set, get) => ({
     try {
       await synchronizeData();
 
-      const timestamp = new Date().toISOString();
-
-      // Persist only when the authenticated account
-      // remains the same after synchronization.
+      // Do not publish a result into a different account's session.
       if (
         userId &&
-        useAuthStore.getState().user?.id === userId
+        useAuthStore.getState().user?.id !== userId
       ) {
+        return;
+      }
+
+      const timestamp = new Date().toISOString();
+
+      if (userId) {
         try {
           await saveLastSuccessfulSyncAt(
             timestamp,
             userId,
           );
         } catch {
-          // A metadata persistence failure must not
-          // invalidate an otherwise successful sync.
+          // Metadata failure must not invalidate successful synchronization.
         }
       }
 
@@ -83,15 +88,34 @@ export const useSyncStore = create<SyncState>((set, get) => ({
         lastSyncedAt: timestamp,
         error: null,
       });
+
+      if (previousStatus === "error") {
+        void useNotificationsStore.getState().addNotification({
+          title: "Synchronization restored",
+          message: "Your data has synchronized successfully again.",
+          category: "sync",
+        });
+      }
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Synchronization failed.";
+
       set({
         status: "error",
-
-        error:
-          error instanceof Error
-            ? error.message
-            : "Synchronization failed.",
+        error: message,
       });
+
+      // Notify only when transitioning into the error state.
+      if (previousStatus !== "error") {
+        void useNotificationsStore.getState().addNotification({
+          title: "Synchronization failed",
+          message:
+            "Mind Vault could not synchronize your latest changes. Your local data remains available.",
+          category: "sync",
+        });
+      }
     }
   },
 }));

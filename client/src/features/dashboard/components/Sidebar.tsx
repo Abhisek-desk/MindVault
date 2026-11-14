@@ -14,9 +14,11 @@ import {
   Search,
   RefreshCw,
   Activity,
+  Bell,
 } from "lucide-react";
 
 import { useAuthStore } from "../../../stores/auth.store";
+import { useNotificationsStore } from "../../../stores/notifications.store";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -31,11 +33,8 @@ const navigationItems = [
   { name: "Learning", path: "/learning", icon: Brain },
   { name: "Search", path: "/search", icon: Search },
   { name: "Conflict Center", path: "/conflicts", icon: RefreshCw },
-  {
-    name: "Sync Diagnostics",
-    path: "/sync",
-    icon: Activity,
-  },
+  { name: "Sync Diagnostics", path: "/sync", icon: Activity },
+  { name: "Notifications", path: "/notifications", icon: Bell },
 ];
 
 function Sidebar({ isOpen, onClose }: SidebarProps) {
@@ -43,6 +42,10 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
+
+  const unreadCount = useNotificationsStore(
+    (state) => state.unreadCount,
+  );
 
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
@@ -78,7 +81,8 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Brand */}
+        {/* BRAND */}
+
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-[#F47768] p-2">
@@ -87,7 +91,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             <div>
               <h1 className="text-xl font-bold">Mind Vault</h1>
-              <p className="text-xs text-gray-400">Your knowledge space</p>
+              <p className="text-xs text-gray-400">
+                Your knowledge space
+              </p>
             </div>
           </div>
 
@@ -100,8 +106,9 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
           </button>
         </div>
 
-        {/* Navigation */}
-        <div className="mt-12">
+        {/* NAVIGATION */}
+
+        <div className="mt-12 min-h-0 flex-1 overflow-y-auto">
           <div className="mb-4 flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">
               Workspace
@@ -134,17 +141,31 @@ function Sidebar({ isOpen, onClose }: SidebarProps) {
                   }
                 >
                   <Icon size={19} />
-                  {item.name}
+
+                  <span className="flex-1">
+                    {item.name}
+                  </span>
+
+                  {item.path === "/notifications" &&
+                    unreadCount > 0 && (
+                      <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B83E32] px-1 text-[10px] font-bold text-white">
+                        {unreadCount > 99 ? "99+" : unreadCount}
+                      </span>
+                    )}
                 </NavLink>
               );
             })}
           </nav>
         </div>
 
-        {/* User and Settings */}
-        <div className="mt-auto space-y-2">
+        {/* USER AND SETTINGS */}
+
+        <div className="mt-4 space-y-2">
           <button
-            onClick={() => navigate("/settings")}
+            onClick={() => {
+              navigate("/settings");
+              onClose();
+            }}
             className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-gray-300 transition hover:bg-white/10 hover:text-white"
           >
             <Settings size={19} />

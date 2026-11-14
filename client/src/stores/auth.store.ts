@@ -359,7 +359,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           }
 
           await closeUserDatabase();
-
+          
           if (generation === authenticationGeneration) {
             set({
               user: null,

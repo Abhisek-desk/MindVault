@@ -1,6 +1,7 @@
 import { apiRequest } from "./api";
 import { saveLocalPack, deleteLocalPack } from "../db/packs.db";
 import type { LocalPack } from "../db/database";
+import { useNotificationsStore } from "../stores/notifications.store";
 
 // Knowledge pack returned by the backend
 export interface KnowledgePack {
@@ -223,6 +224,12 @@ export const downloadKnowledgePack = async (
 
     await apiRequest<DownloadResponse>(`/downloads/${pack._id}/complete`, {
       method: "PATCH",
+    });
+
+    void useNotificationsStore.getState().addNotification({
+      title: "Knowledge pack downloaded",
+      message: `"${pack.title}" is ready to use offline.`,
+      category: "downloads",
     });
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {

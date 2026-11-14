@@ -22,6 +22,7 @@ import {
 
 import Sidebar from "../../dashboard/components/Sidebar";
 import DashboardHeader from "../../dashboard/components/DashboardHeader";
+import { useNotificationsStore } from "../../../stores/notifications.store";
 
 import { getLocalPacks } from "../../../db/packs.db";
 
@@ -288,44 +289,66 @@ function LearningPage() {
   // =====================================
 
   const toggleLessonCompletion = async () => {
-    if (!activeContent || !activeProgress || !selectedLesson) {
-      return;
+  if (!activeContent || !activeProgress || !selectedLesson) {
+    return;
+  }
+
+  setUpdatingProgress(true);
+  setError("");
+
+  try {
+    const wasCompleted = activeProgress.completedTopics.includes(
+      selectedLesson.id,
+    );
+
+    const updated = await updateLessonProgress(
+      activeContent.packId,
+      selectedLesson.id,
+      activeContent.lessons.length,
+      !wasCompleted,
+    );
+
+    setActiveProgress(updated);
+
+    // Notify only when a lesson changes from incomplete to complete.
+    if (!wasCompleted) {
+      void useNotificationsStore.getState().addNotification({
+        title: "Lesson completed",
+        message: `You completed "${selectedLesson.title}" in "${activeContent.title}".`,
+        category: "learning",
+      });
     }
 
-    setUpdatingProgress(true);
-    setError("");
-
-    try {
-      const isCompleted = activeProgress.completedTopics.includes(
-        selectedLesson.id,
-      );
-
-      const updated = await updateLessonProgress(
-        activeContent.packId,
-        selectedLesson.id,
-        activeContent.lessons.length,
-        !isCompleted,
-      );
-
-      setActiveProgress(updated);
-
-      const records = await getAllLearningProgress();
-
-      setProgressRecords(records);
-
-      if (navigator.onLine) {
-        void syncLearningProgress();
-      }
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to update lesson progress.",
-      );
-    } finally {
-      setUpdatingProgress(false);
+    // Notify only when the course reaches completed status for the first time.
+    if (
+      !wasCompleted &&
+      activeProgress.status !== "completed" &&
+      updated.status === "completed"
+    ) {
+      void useNotificationsStore.getState().addNotification({
+        title: "Course completed!",
+        message: `Congratulations! You completed the "${activeContent.title}" course.`,
+        category: "learning",
+      });
     }
-  };
+
+    const records = await getAllLearningProgress();
+
+    setProgressRecords(records);
+
+    if (navigator.onLine) {
+      void syncLearningProgress();
+    }
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to update lesson progress.",
+    );
+  } finally {
+    setUpdatingProgress(false);
+  }
+};
 
   // =====================================
   // NAVIGATE BETWEEN LESSONS

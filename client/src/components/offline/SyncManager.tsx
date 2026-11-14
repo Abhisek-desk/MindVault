@@ -3,9 +3,8 @@ import { useEffect } from "react";
 import { useAuthStore } from "../../stores/auth.store";
 import { useSyncStore } from "../../stores/sync.store";
 
-import {
-  getLastSuccessfulSyncAt,
-} from "../../db/sync.db";
+import { getLastSuccessfulSyncAt } from "../../db/sync.db";
+import { getAppSettings } from "../../db/settings.db";
 
 async function checkInternetConnection(): Promise<boolean> {
   if (!navigator.onLine) {
@@ -76,7 +75,6 @@ function SyncManager() {
 
     const RETRY_INTERVAL = 30000;
 
-    // Restore the account-specific last sync timestamp.
     void getLastSuccessfulSyncAt()
       .then((timestamp) => {
         if (mounted) {
@@ -109,9 +107,7 @@ function SyncManager() {
 
         if (!connected) {
           wasOnline = false;
-
           setOffline();
-
           return;
         }
 
@@ -119,24 +115,34 @@ function SyncManager() {
 
         if (!wasOnline) {
           wasOnline = true;
-          lastSyncAttempt = now;
+        }
 
-          await syncNow();
+        // Respect the user's Automatic Sync preference.
+        const settings = await getAppSettings();
 
+        if (!mounted || !settings.autoSync) {
           return;
         }
 
-        const syncStatus =
-          useSyncStore.getState().status;
+        const syncStatus = useSyncStore.getState().status;
+
+        const shouldRetry =
+          syncStatus === "error" &&
+          now - lastSyncAttempt >= RETRY_INTERVAL;
+
+        const shouldStart =
+          syncStatus === "idle" ||
+          syncStatus === "offline";
 
         if (
-          syncStatus === "error" &&
+          (shouldStart || shouldRetry) &&
           now - lastSyncAttempt >= RETRY_INTERVAL
         ) {
           lastSyncAttempt = now;
-
           await syncNow();
         }
+      } catch {
+        // Background checks should never crash the application.
       } finally {
         checking = false;
       }
@@ -144,7 +150,6 @@ function SyncManager() {
 
     const handleOffline = () => {
       wasOnline = false;
-
       setOffline();
     };
 

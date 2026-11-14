@@ -6,6 +6,13 @@ import { useSyncStore } from "./sync.store";
 vi.mock("../services/sync.service", () => ({
   synchronizeData: vi.fn(),
 }));
+vi.mock("./notifications.store", () => ({
+  useNotificationsStore: {
+    getState: () => ({
+      addNotification: vi.fn().mockResolvedValue(undefined),
+    }),
+  },
+}));
 
 const mockedSynchronizeData = vi.mocked(synchronizeData);
 

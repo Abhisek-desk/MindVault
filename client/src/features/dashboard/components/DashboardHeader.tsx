@@ -1,3 +1,6 @@
+import { useEffect } from "react";
+import { Link } from "react-router-dom";
+
 import {
   Menu,
   Search,
@@ -11,17 +14,46 @@ import {
 
 import { useAuthStore } from "../../../stores/auth.store";
 import { useSyncStore } from "../../../stores/sync.store";
+import { useNotificationsStore } from "../../../stores/notifications.store";
 
 interface DashboardHeaderProps {
   onMenuClick: () => void;
 }
 
-function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
+function DashboardHeader({
+  onMenuClick,
+}: DashboardHeaderProps) {
   const user = useAuthStore((state) => state.user);
 
   const status = useSyncStore((state) => state.status);
   const lastSyncedAt = useSyncStore((state) => state.lastSyncedAt);
   const syncNow = useSyncStore((state) => state.syncNow);
+
+  const unreadCount = useNotificationsStore(
+    (state) => state.unreadCount,
+  );
+
+  const loadNotifications = useNotificationsStore(
+    (state) => state.loadNotifications,
+  );
+
+  const resetNotifications = useNotificationsStore(
+    (state) => state.reset,
+  );
+
+  const userId = user?.id;
+
+  useEffect(() => {
+    resetNotifications();
+
+    if (userId) {
+      void loadNotifications();
+    }
+
+    return () => {
+      resetNotifications();
+    };
+  }, [userId, loadNotifications, resetNotifications]);
 
   const isOnline = status !== "offline";
 
@@ -40,7 +72,7 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
     },
     error: {
       label: "Sync failed",
-      color: "bg-red-100 text-red-700",
+      color: "bg-red-100 text-red-100",
     },
     offline: {
       label: "Waiting for internet",
@@ -109,7 +141,10 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           className={`hidden items-center gap-2 rounded-full px-3 py-2 text-xs font-semibold sm:flex ${currentStatus.color}`}
         >
           {status === "syncing" && isOnline && (
-            <RefreshCw size={14} className="animate-spin" />
+            <RefreshCw
+              size={14}
+              className="animate-spin"
+            />
           )}
 
           {status === "synced" && isOnline && (
@@ -139,16 +174,29 @@ function DashboardHeader({ onMenuClick }: DashboardHeaderProps) {
           </span>
         </button>
 
-        <button
+        <Link
+          to="/notifications"
+          aria-label={
+            unreadCount > 0
+              ? `Notifications, ${unreadCount} unread`
+              : "Notifications"
+          }
+          title="Notifications"
           className="relative rounded-xl p-2.5 text-[#17243D] transition hover:bg-[#F8F1E5]"
-          aria-label="Notifications"
         >
           <Bell size={21} />
 
-          <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#F47768]" />
-        </button>
+          {unreadCount > 0 && (
+            <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#B83E32] px-1 text-[10px] font-bold text-white ring-2 ring-[#FFFAF1]">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </Link>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#17243D] font-bold text-white">
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-[#17243D] font-bold text-white"
+          title={user?.name || "User"}
+        >
           {user?.name?.charAt(0).toUpperCase() || "U"}
         </div>
       </div>

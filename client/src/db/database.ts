@@ -79,6 +79,49 @@ export interface LocalConflict {
 }
 
 // =====================================
+// SETTINGS
+// =====================================
+
+export interface LocalAppSettings {
+  id: "app-settings";
+
+  autoSync: boolean;
+  inAppNotifications: boolean;
+  browserNotifications: boolean;
+  reducedMotion: boolean;
+
+  updatedAt: string;
+}
+
+export const DEFAULT_APP_SETTINGS: LocalAppSettings = {
+  id: "app-settings",
+  autoSync: true,
+  inAppNotifications: true,
+  browserNotifications: false,
+  reducedMotion: false,
+  updatedAt: new Date().toISOString(),
+};
+
+// =====================================
+// NOTIFICATIONS
+// =====================================
+
+export type NotificationCategory =
+  | "system"
+  | "sync"
+  | "downloads"
+  | "learning";
+
+export interface LocalNotification {
+  id: string;
+  title: string;
+  message: string;
+  category: NotificationCategory;
+  createdAt: string;
+  isRead: boolean;
+}
+
+// =====================================
 // DATABASE CLASS
 // =====================================
 
@@ -90,6 +133,9 @@ class MindVaultDatabase extends Dexie {
   syncMeta!: Table<LocalSyncMeta, string>;
   conflicts!: Table<LocalConflict, string>;
   learningProgress!: Table<LocalLearningProgress, string>;
+
+  settings!: Table<LocalAppSettings, string>;
+  notifications!: Table<LocalNotification, string>;
 
   constructor(databaseName: string) {
     super(databaseName);
@@ -163,8 +209,23 @@ class MindVaultDatabase extends Dexie {
       syncMeta: "key",
       conflicts:
         "id, &[entityType+entityId], entityType, entityId, detectedAt",
-      learningProgress:
-        "packId, status, updatedAt, syncStatus",
+      learningProgress: "packId, status, updatedAt, syncStatus",
+    });
+
+    // VERSION 6 — SETTINGS AND NOTIFICATIONS
+    this.version(6).stores({
+      notes: "id, folderId, updatedAt, syncStatus",
+      packs: "id, category, language",
+      folders: "id, name, updatedAt, syncStatus",
+      syncQueue:
+        "++id, &clientMutationId, [entityType+entityId], createdAt, status",
+      syncMeta: "key",
+      conflicts:
+        "id, &[entityType+entityId], entityType, entityId, detectedAt",
+      learningProgress: "packId, status, updatedAt, syncStatus",
+
+      settings: "id",
+      notifications: "id, createdAt, isRead, category",
     });
   }
 }
@@ -172,9 +233,6 @@ class MindVaultDatabase extends Dexie {
 // =====================================
 // ACTIVE DATABASE
 // =====================================
-
-// The original database is retained as a legacy database.
-// It is never automatically assigned to a new account.
 
 export let db = new MindVaultDatabase("MindVaultDatabase");
 
@@ -191,8 +249,6 @@ let activeDatabaseUsers = 0;
 let pendingDatabaseSwitches = 0;
 
 let resolveDatabaseUsage: (() => void) | null = null;
-
-// Wait until all active database operations finish.
 
 const waitForDatabaseUsageToFinish = async (): Promise<void> => {
   if (activeDatabaseUsers === 0) {

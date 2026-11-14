@@ -19,6 +19,8 @@ import {
   LearningPage,
   RoutePage,
   SyncDiagnosticsPage,
+  SettingsPage,
+  NotificationsPage,
 } from "./route-pages";
 
 // =====================================
@@ -128,6 +130,22 @@ const router = createBrowserRouter([
         element: (
           <RoutePage>
             <SyncDiagnosticsPage />
+          </RoutePage>
+        ),
+      },
+      {
+        path: "/settings",
+        element: (
+          <RoutePage>
+            <SettingsPage />
+          </RoutePage>
+        ),
+      },
+      {
+        path: "/notifications",
+        element: (
+          <RoutePage>
+            <NotificationsPage />
           </RoutePage>
         ),
       },

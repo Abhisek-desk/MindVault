@@ -53,6 +53,14 @@ export const SyncDiagnosticsPage = lazy(
   () => import("../features/sync/pages/SyncDiagnosticsPage"),
 );
 
+export const SettingsPage = lazy(
+  () => import("../features/settings/pages/SettingsPage"),
+);
+
+export const NotificationsPage = lazy(
+  () => import("../features/settings/pages/NotificationsPage"),
+);
+
 // =====================================
 // LOADING FALLBACK
 // =====================================

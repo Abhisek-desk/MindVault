@@ -970,3 +970,12 @@ Potential future enhancements include:
 
 **Mind Vault — Your Knowledge. Your Memory. Always Available.**
 
+
+👨‍💻 Author
+
+    ABHISEK MISHRA🤗
+
+- LinkedIn: https://www.linkedin.com/in/abhisek-mishra-31
+
+- GitHub: https://github.com/Abhisek-desk
+

@@ -968,21 +968,5 @@ Potential future enhancements include:
 
 
 
-## License
-
-
-
-This project is currently developed as a college major project.
-
-
-
-License terms can be added when distribution requirements are finalized.
-
-
-
----
-
-
-
 **Mind Vault — Your Knowledge. Your Memory. Always Available.**
 
